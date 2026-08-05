@@ -383,6 +383,15 @@
 
     const nameById = Object.fromEntries((names || []).map(n => [n.id, n.display_name]));
 
+    // Sign-up toggling only makes sense for a slam with sign-ups still open --
+    // once the draw's happened, status here would be misleading to edit
+    const canToggleSignup = currentEvent.event_type === 'slam' && !currentEvent.signups_closed_at;
+    let signedUpIds = new Set();
+    if (currentEvent.event_type === 'slam') {
+      const { data: signups } = await supabase.from('slam_signups').select('attendee_id').eq('event_id', currentEvent.id);
+      signedUpIds = new Set((signups || []).map(s => s.attendee_id));
+    }
+
     for (const row of attendanceRows) {
       const div = document.createElement('div');
       div.className = 'roster-row checked-in';
@@ -391,7 +400,25 @@
 
       const rightSide = document.createElement('span');
       rightSide.style.cssText = 'display:flex; align-items:center; gap:8px;';
-      rightSide.innerHTML = `<span class="badge">✓ here</span>`;
+
+      if (currentEvent.event_type === 'slam') {
+        const isSignedUp = signedUpIds.has(row.attendee_id);
+        if (canToggleSignup) {
+          const toggleBtn = document.createElement('button');
+          toggleBtn.textContent = isSignedUp ? '✓ Competing' : 'Not competing';
+          toggleBtn.className = 'badge';
+          toggleBtn.style.cssText = `border:none; cursor:pointer; font-family:inherit; ${isSignedUp ? '' : 'background:var(--paper); color:var(--ink-soft); border:1px solid var(--line);'}`;
+          toggleBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await toggleSignup(row.attendee_id, !isSignedUp, name);
+          });
+          rightSide.appendChild(toggleBtn);
+        } else {
+          rightSide.innerHTML += isSignedUp ? '<span class="badge">✓ competed</span>' : '';
+        }
+      } else {
+        rightSide.innerHTML += '<span class="badge">✓ here</span>';
+      }
 
       const removeBtn = document.createElement('button');
       removeBtn.textContent = 'Remove';
@@ -406,6 +433,22 @@
       div.appendChild(rightSide);
       rosterEl.appendChild(div);
     }
+  }
+
+  async function toggleSignup(attendeeId, wantSignedUp, name) {
+    if (wantSignedUp) {
+      const { error } = await supabase.from('slam_signups')
+        .upsert({ event_id: currentEvent.id, attendee_id: attendeeId }, { onConflict: 'event_id,attendee_id', ignoreDuplicates: true });
+      if (error) { toast('Could not sign up: ' + error.message); return; }
+      toast(`Signed up: ${name}`);
+    } else {
+      const { error } = await supabase.from('slam_signups').delete()
+        .eq('event_id', currentEvent.id).eq('attendee_id', attendeeId);
+      if (error) { toast('Could not remove sign-up: ' + error.message); return; }
+      toast(`Removed from sign-ups: ${name}`);
+    }
+    await loadRoster();
+    await refreshSlamUI();
   }
 
   async function removeCheckIn(attendeeId, name) {
