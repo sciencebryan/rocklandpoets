@@ -1,14 +1,10 @@
 /* ============================================================
-   Rockland Poets — brand design tokens
+ 
    Palette (official brand colors):
      cyan1 #C5F6FA  cyan5 #22B8CF  cyan9 #0B7285
      gray1 #F1F3F5  gray5 #ADB5BD  gray9 #212529
    Type: Roboto (UI/body) + Ale Pro (display/headers).
-   NOTE on Ale Pro: it's a commercial font. Drop your licensed
-   "Ale Pro.otf" file into a /fonts folder next to this CSS file
-   (same folder as login.html etc.) and it'll load automatically.
-   Only one weight is wired up below since that's what's on hand --
-   the browser will synthesize bold from it as needed.
+
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
