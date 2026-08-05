@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Round Entry</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <div style="text-align:right;">
+      <div class="meta mono" id="eventLabel">loading…</div>
+      <a href="checkin.html" class="btn-ghost" style="font-size:0.8rem; text-decoration:none; display:inline-block; padding:2px 0;">← Check-in</a>
+    </div>
+  </div>
+
+  <div id="eventPicker" class="card" style="display:none;">
+    <label for="eventDate">Which event?</label>
+    <input type="date" id="eventDate">
+    <button class="btn-primary" id="loadEventBtn" style="margin-top:14px;">Load event</button>
+    <div id="eventPickerError" class="error-box" style="display:none;"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <div id="roundTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;"></div>
+
+    <div id="roundEntry"></div>
+
+    <button class="btn-secondary" id="addRoundBtn" style="margin-top:12px;">+ Add next round</button>
+
+    <h2 style="font-size:1.1rem; margin-top:32px; margin-bottom:10px;">Standings so far</h2>
+    <div id="standings"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function todayISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  let currentEvent = null;
+  let activeRound = 1;
+  let nameById = {};
+
+  document.getElementById('eventDate').value = todayISO();
+  document.getElementById('eventPicker').style.display = 'block';
+
+  document.getElementById('loadEventBtn').addEventListener('click', loadEvent);
+
+  async function loadEvent() {
+    const dateStr = document.getElementById('eventDate').value;
+    const errEl = document.getElementById('eventPickerError');
+    errEl.style.display = 'none';
+
+    const { data: ev, error } = await supabase.from('events').select('*').eq('event_date', dateStr).maybeSingle();
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    if (!ev) { errEl.textContent = "No event found for that date. Start it from the check-in page first."; errEl.style.display = 'block'; return; }
+    if (ev.event_type !== 'slam') { errEl.textContent = "This is an open mic night — no rounds to score."; errEl.style.display = 'block'; return; }
+    if (!ev.signups_closed_at) { errEl.textContent = "Sign-ups haven't been closed yet — do that on the check-in page first."; errEl.style.display = 'block'; return; }
+
+    currentEvent = ev;
+    document.getElementById('eventLabel').textContent = `${ev.event_date} · Slam`;
+    document.getElementById('eventPicker').style.display = 'none';
+    document.getElementById('mainArea').style.display = 'block';
+
+    await loadNames();
+    await renderRoundTabs();
+    await showRound(1);
+  }
+
+  async function loadNames() {
+    const { data } = await supabase.from('attendee_display').select('id, display_name');
+    nameById = Object.fromEntries((data || []).map(n => [n.id, n.display_name]));
+  }
+
+  async function getRoundsWithData() {
+    const { data } = await supabase.from('competition_rounds').select('round_number').eq('event_id', currentEvent.id);
+    const rounds = [...new Set((data || []).map(r => r.round_number))].sort((a, b) => a - b);
+    return rounds.length ? rounds : [1];
+  }
+
+  async function renderRoundTabs() {
+    const rounds = await getRoundsWithData();
+    const maxRound = Math.max(...rounds, activeRound);
+    const tabsEl = document.getElementById('roundTabs');
+    tabsEl.innerHTML = '';
+    for (let r = 1; r <= maxRound; r++) {
+      const btn = document.createElement('button');
+      btn.textContent = `Round ${r}`;
+      btn.className = r === activeRound ? 'btn-primary' : 'btn-secondary';
+      btn.style.width = 'auto';
+      btn.style.padding = '10px 18px';
+      btn.addEventListener('click', () => showRound(r));
+      tabsEl.appendChild(btn);
+    }
+  }
+
+  document.getElementById('addRoundBtn').addEventListener('click', async () => {
+    const rounds = await getRoundsWithData();
+    const nextRound = Math.max(...rounds) + 1;
+    await showRound(nextRound);
+  });
+
+  async function getParticipantsForRound(roundNumber) {
+    if (roundNumber === 1) {
+      // Round 1 = the drawn competing order
+      const { data } = await supabase.from('slam_signups')
+        .select('attendee_id, draw_order')
+        .eq('event_id', currentEvent.id).eq('randomized_out', false)
+        .order('draw_order', { ascending: true });
+      return (data || []).map(s => s.attendee_id);
+    }
+    // Later rounds default to whoever read in the previous round -- organizer
+    // unchecks anyone who didn't advance
+    const { data } = await supabase.from('competition_rounds')
+      .select('attendee_id').eq('event_id', currentEvent.id).eq('round_number', roundNumber - 1);
+    return [...new Set((data || []).map(r => r.attendee_id))];
+  }
+
+  async function getExistingRoundData(roundNumber) {
+    const { data } = await supabase.from('competition_rounds')
+      .select('attendee_id, poem_title, votes').eq('event_id', currentEvent.id).eq('round_number', roundNumber);
+    return Object.fromEntries((data || []).map(r => [r.attendee_id, r]));
+  }
+
+  async function getPoemHistory(attendeeId) {
+    const { data } = await supabase.from('poems_read').select('poem_title, event_id').eq('attendee_id', attendeeId);
+    return (data || []).map(r => r.poem_title);
+  }
+
+  async function showRound(roundNumber) {
+    activeRound = roundNumber;
+    await renderRoundTabs();
+
+    const candidates = await getParticipantsForRound(roundNumber);
+    const existing = await getExistingRoundData(roundNumber);
+
+    const container = document.getElementById('roundEntry');
+    container.innerHTML = `<div class="meta" style="margin-bottom:10px;">
+      ${roundNumber === 1 ? "Tonight's drawn order — uncheck anyone who isn't reading." : "Uncheck anyone who didn't advance to this round."}
+    </div>`;
+
+    for (const attendeeId of candidates) {
+      const name = nameById[attendeeId] || '(unknown)';
+      const prior = existing[attendeeId];
+      const history = await getPoemHistory(attendeeId);
+      const historyForOtherEvents = prior ? history.filter(h => h !== prior.poem_title) : history;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:1rem; font-weight:600; color:var(--ink); margin:0 0 10px;">
+          <input type="checkbox" class="participating" data-attendee="${attendeeId}" ${prior || roundNumber === 1 ? 'checked' : ''} style="width:20px; height:20px;">
+          ${escapeHtml(name)}
+        </label>
+        <div class="roundFields" style="display:${prior || roundNumber === 1 ? 'block' : 'none'};">
+          <label>Poem title</label>
+          <input type="text" class="poemTitle" value="${escapeHtml(prior?.poem_title || '')}">
+          <label>Votes</label>
+          <input type="text" inputmode="numeric" class="votes" value="${prior?.votes ?? ''}" placeholder="leave blank if not recorded">
+          ${historyForOtherEvents.length ? `<div class="meta" style="margin-top:8px;">Previously read: ${historyForOtherEvents.map(escapeHtml).join(', ')}</div>` : ''}
+        </div>
+      `;
+
+      const checkbox = card.querySelector('.participating');
+      const fields = card.querySelector('.roundFields');
+      checkbox.addEventListener('change', () => {
+        fields.style.display = checkbox.checked ? 'block' : 'none';
+      });
+
+      container.appendChild(card);
+    }
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-primary';
+    saveBtn.textContent = `Save Round ${roundNumber}`;
+    saveBtn.style.marginTop = '8px';
+    saveBtn.addEventListener('click', () => saveRound(roundNumber));
+    container.appendChild(saveBtn);
+
+    await loadStandings();
+  }
+
+  async function saveRound(roundNumber) {
+    const cards = document.querySelectorAll('#roundEntry .card');
+    const rows = [];
+    for (const card of cards) {
+      const checkbox = card.querySelector('.participating');
+      if (!checkbox.checked) continue;
+      const attendeeId = parseInt(checkbox.dataset.attendee, 10);
+      const poemTitle = card.querySelector('.poemTitle').value.trim();
+      const votesRaw = card.querySelector('.votes').value.trim();
+      if (!poemTitle) { toast('Every participating poet needs a poem title.'); return; }
+      rows.push({
+        event_id: currentEvent.id,
+        attendee_id: attendeeId,
+        round_number: roundNumber,
+        poem_title: poemTitle,
+        votes: votesRaw ? parseInt(votesRaw, 10) : null,
+      });
+    }
+
+    if (rows.length === 0) { toast('No participants selected for this round.'); return; }
+
+    // Clear any prior rows for this round+event, then insert fresh
+    // (simplest way to handle edits/un-checking someone without tracking diffs)
+    await supabase.from('competition_rounds').delete().eq('event_id', currentEvent.id).eq('round_number', roundNumber);
+    const { error } = await supabase.from('competition_rounds').insert(rows);
+    if (error) { toast('Save failed: ' + error.message); return; }
+
+    toast(`Round ${roundNumber} saved.`);
+    await renderRoundTabs();
+    await loadStandings();
+  }
+
+  async function loadStandings() {
+    const { data, error } = await supabase.from('all_placements')
+      .select('attendee_id, placement').eq('event_id', currentEvent.id).order('placement', { ascending: true });
+
+    const el = document.getElementById('standings');
+    if (error || !data || data.length === 0) {
+      el.innerHTML = '<div class="empty-state">No results yet — save a round to see standings.</div>';
+      return;
+    }
+
+    el.innerHTML = '';
+    for (const row of data) {
+      const div = document.createElement('div');
+      div.className = 'roster-row';
+      div.innerHTML = `<span class="name">${escapeHtml(nameById[row.attendee_id] || '(unknown)')}</span><span class="badge mono">#${row.placement}</span>`;
+      el.appendChild(div);
+    }
+  }
+</script>
+</body>
+</html>
