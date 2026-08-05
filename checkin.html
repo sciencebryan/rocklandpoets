@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Check In</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="wordmark" style="font-size:1.3rem;">Rockland Poets</div>
+    <div style="text-align:right;">
+      <div class="meta mono" id="eventLabel">loading…</div>
+      <button class="btn-ghost" id="signOutBtn" style="padding:2px 0; min-height:auto; font-size:0.8rem;">Sign out</button>
+    </div>
+  </div>
+
+  <div id="eventPicker" class="card" style="display:none;">
+    <label for="eventDate">Tonight's date</label>
+    <input type="date" id="eventDate">
+    <button class="btn-primary" id="setEventBtn" style="margin-top:14px;">Start / find this event</button>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <input type="text" id="search" placeholder="Type a name to find yourself…" autocomplete="off" style="margin-bottom:12px;">
+
+    <div id="results"></div>
+
+    <div id="confirmPanel" class="card" style="display:none; border-left: 4px solid var(--brass);">
+      <div style="font-weight:600; margin-bottom:8px;">Is this you?</div>
+      <div id="confirmList"></div>
+      <button class="btn-ghost" id="cancelConfirm" style="margin-top:8px;">None of these — cancel</button>
+    </div>
+
+    <div id="noResults" style="display:none;" class="empty-state">
+      <div style="margin-bottom:12px;">No match found.</div>
+      <button class="btn-secondary" id="showAddForm">Add yourself to the list</button>
+    </div>
+
+    <div id="addForm" class="card" style="display:none;">
+      <div style="font-weight:600; margin-bottom:4px;">New here? Welcome.</div>
+      <div class="meta" style="margin-bottom:8px;">Everything except your first name is optional.</div>
+
+      <label for="addFirst">First name</label>
+      <input type="text" id="addFirst">
+
+      <label for="addLast">Last name (or just an initial)</label>
+      <input type="text" id="addLast">
+
+      <label for="addNickname">Nickname — if you'd rather go by this publicly</label>
+      <input type="text" id="addNickname">
+
+      <label for="addEmail">Email (optional)</label>
+      <input type="email" id="addEmail">
+
+      <label for="addPhone">Phone (optional)</label>
+      <input type="tel" id="addPhone">
+
+      <label for="addReferral">How'd you hear about us? (optional)</label>
+      <select id="addReferral"><option value="">— Select —</option></select>
+
+      <label for="addPronouns">Pronouns (optional)</label>
+      <input type="text" id="addPronouns">
+
+      <label for="addPhotoConsent">Okay to post event photos of you? (optional)</label>
+      <select id="addPhotoConsent">
+        <option value="">— Select —</option>
+        <option value="Yes, you can post photos that I'm in">Yes, that's fine</option>
+        <option value="No, please blur me out of any photos you post">No, please blur me out</option>
+      </select>
+
+      <div id="addError" class="error-box" style="display:none;"></div>
+
+      <button class="btn-primary" id="submitAdd" style="margin-top:16px;">Add me & check in</button>
+      <button class="btn-ghost" id="cancelAdd" style="margin-top:4px;">Cancel</button>
+    </div>
+
+    <h2 style="font-size:1.1rem; margin-top:28px; margin-bottom:10px;">Tonight's roster (<span id="rosterCount">0</span>)</h2>
+    <div id="roster"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ---- Auth guard ----
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = 'login.html';
+  }
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  // ---- Toast helper ----
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  // ---- Event selection ----
+  let currentEvent = null; // { id, event_date }
+
+  function todayISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  async function findOrCreateEvent(dateStr) {
+    let { data: existing, error } = await supabase.from('events').select('id, event_date').eq('event_date', dateStr).maybeSingle();
+    if (error) { toast('Error loading event: ' + error.message); return null; }
+    if (existing) return existing;
+
+    const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr }).select().single();
+    if (createError) { toast('Error creating event: ' + createError.message); return null; }
+    return created;
+  }
+
+  async function setEvent(dateStr) {
+    const ev = await findOrCreateEvent(dateStr);
+    if (!ev) return;
+    currentEvent = ev;
+    document.getElementById('eventLabel').textContent = ev.event_date;
+    document.getElementById('eventPicker').style.display = 'none';
+    document.getElementById('mainArea').style.display = 'block';
+    await loadRoster();
+  }
+
+  document.getElementById('eventDate').value = todayISO();
+  document.getElementById('setEventBtn').addEventListener('click', () => {
+    const dateStr = document.getElementById('eventDate').value;
+    if (dateStr) setEvent(dateStr);
+  });
+
+  // Auto-start with today's event
+  document.getElementById('eventDate').value = todayISO();
+  document.getElementById('eventPicker').style.display = 'block';
+
+  // ---- Search ----
+  const searchEl = document.getElementById('search');
+  const resultsEl = document.getElementById('results');
+  const noResultsEl = document.getElementById('noResults');
+  let searchDebounce;
+
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(runSearch, 250);
+  });
+
+  async function runSearch() {
+    const q = searchEl.value.trim();
+    resultsEl.innerHTML = '';
+    document.getElementById('confirmPanel').style.display = 'none';
+    document.getElementById('addForm').style.display = 'none';
+    noResultsEl.style.display = 'none';
+
+    if (q.length < 2) return;
+
+    const { data, error } = await supabase
+      .from('attendee_display')
+      .select('id, display_name')
+      .ilike('display_name', `%${q}%`)
+      .limit(15);
+
+    if (error) { toast('Search error: ' + error.message); return; }
+
+    if (!data || data.length === 0) {
+      noResultsEl.style.display = 'block';
+      return;
+    }
+
+    // Collapse duplicate display_names into one tappable row (collision handled on tap)
+    const uniqueNames = [...new Set(data.map(d => d.display_name))];
+    for (const name of uniqueNames) {
+      const row = document.createElement('button');
+      row.className = 'roster-row';
+      row.style.cssText += 'border:1px solid var(--line); border-left:4px solid var(--brass); cursor:pointer; font-family:inherit;';
+      row.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="meta">Tap to check in</span>`;
+      row.addEventListener('click', () => selectName(name, data.filter(d => d.display_name === name)));
+      resultsEl.appendChild(row);
+    }
+  }
+
+  async function selectName(name, matches) {
+    // Check for a real collision (people who share this exact display name)
+    const { data: candidates, error } = await supabase
+      .from('attendee_confirm_candidates')
+      .select('id, disambiguator')
+      .eq('base_name', name);
+
+    if (error) { toast('Error: ' + error.message); return; }
+
+    if (candidates && candidates.length > 1) {
+      showConfirmPanel(name, candidates);
+    } else if (matches.length === 1) {
+      checkIn(matches[0].id, name);
+    } else {
+      // No collision info and multiple raw matches (shouldn't normally happen) -- ask to confirm via disambiguator anyway
+      showConfirmPanel(name, candidates && candidates.length ? candidates : matches.map(m => ({ id: m.id, disambiguator: '(no extra info on file)' })));
+    }
+  }
+
+  function showConfirmPanel(name, candidates) {
+    const panel = document.getElementById('confirmPanel');
+    const list = document.getElementById('confirmList');
+    list.innerHTML = '';
+    for (const c of candidates) {
+      const btn = document.createElement('button');
+      btn.className = 'roster-row';
+      btn.style.cssText += 'border:1px solid var(--line); border-left:4px solid var(--brass); cursor:pointer; font-family:inherit;';
+      btn.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="mono meta">${escapeHtml(c.disambiguator || '')}</span>`;
+      btn.addEventListener('click', () => { panel.style.display = 'none'; checkIn(c.id, name); });
+      list.appendChild(btn);
+    }
+    panel.style.display = 'block';
+  }
+
+  document.getElementById('cancelConfirm').addEventListener('click', () => {
+    document.getElementById('confirmPanel').style.display = 'none';
+  });
+
+  async function checkIn(attendeeId, name) {
+    const { error } = await supabase
+      .from('attendance')
+      .upsert({ attendee_id: attendeeId, event_id: currentEvent.id }, { onConflict: 'attendee_id,event_id', ignoreDuplicates: true });
+
+    if (error) { toast('Check-in failed: ' + error.message); return; }
+
+    toast(`Checked in: ${name}`);
+    searchEl.value = '';
+    resultsEl.innerHTML = '';
+    await loadRoster();
+  }
+
+  // ---- Add new attendee ----
+  document.getElementById('showAddForm').addEventListener('click', () => {
+    document.getElementById('addFirst').value = searchEl.value.trim();
+    document.getElementById('addForm').style.display = 'block';
+    noResultsEl.style.display = 'none';
+  });
+  document.getElementById('cancelAdd').addEventListener('click', () => {
+    document.getElementById('addForm').style.display = 'none';
+  });
+
+  async function loadReferralSources() {
+    const { data, error } = await supabase.from('referral_sources').select('id, label').order('label');
+    if (error) return;
+    const sel = document.getElementById('addReferral');
+    for (const r of data) {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.label;
+      sel.appendChild(opt);
+    }
+  }
+  loadReferralSources();
+
+  document.getElementById('submitAdd').addEventListener('click', async () => {
+    const first = document.getElementById('addFirst').value.trim();
+    const errEl = document.getElementById('addError');
+    errEl.style.display = 'none';
+
+    if (!first) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
+
+    const payload = {
+      first_name: first,
+      last_name: document.getElementById('addLast').value.trim() || null,
+      nickname: document.getElementById('addNickname').value.trim() || null,
+      email: document.getElementById('addEmail').value.trim() || null,
+      phone: document.getElementById('addPhone').value.trim() || null,
+      referral_source_id: document.getElementById('addReferral').value || null,
+      pronouns: document.getElementById('addPronouns').value.trim() || null,
+      photo_consent: document.getElementById('addPhotoConsent').value || null,
+    };
+
+    const { data: newAttendee, error } = await supabase.from('attendees').insert(payload).select().single();
+    if (error) { errEl.textContent = 'Could not save: ' + error.message; errEl.style.display = 'block'; return; }
+
+    document.getElementById('addForm').style.display = 'none';
+    document.getElementById('addFirst').value = '';
+    document.getElementById('addLast').value = '';
+    document.getElementById('addNickname').value = '';
+    document.getElementById('addEmail').value = '';
+    document.getElementById('addPhone').value = '';
+    document.getElementById('addPronouns').value = '';
+
+    await checkIn(newAttendee.id, first);
+  });
+
+  // ---- Roster ----
+  async function loadRoster() {
+    if (!currentEvent) return;
+    const { data: attendanceRows, error } = await supabase
+      .from('attendance')
+      .select('id, attendee_id')
+      .eq('event_id', currentEvent.id)
+      .order('id', { ascending: true });
+
+    const rosterEl = document.getElementById('roster');
+    rosterEl.innerHTML = '';
+
+    if (error) { toast('Roster load error: ' + error.message); return; }
+
+    document.getElementById('rosterCount').textContent = attendanceRows ? attendanceRows.length : 0;
+
+    if (!attendanceRows || attendanceRows.length === 0) {
+      rosterEl.innerHTML = '<div class="empty-state">No one checked in yet tonight.</div>';
+      return;
+    }
+
+    const ids = attendanceRows.map(r => r.attendee_id);
+    const { data: names, error: nameError } = await supabase
+      .from('attendee_display')
+      .select('id, display_name')
+      .in('id', ids);
+
+    if (nameError) { toast('Roster load error: ' + nameError.message); return; }
+
+    const nameById = Object.fromEntries((names || []).map(n => [n.id, n.display_name]));
+
+    for (const row of attendanceRows) {
+      const div = document.createElement('div');
+      div.className = 'roster-row checked-in';
+      div.innerHTML = `<span class="name">${escapeHtml(nameById[row.attendee_id] || '(unknown)')}</span><span class="badge">✓ here</span>`;
+      rosterEl.appendChild(div);
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>

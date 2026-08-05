@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Organizer Login</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page" style="display:flex; flex-direction:column; justify-content:center; min-height:100vh; padding-top:0; padding-bottom:0;">
+  <div style="text-align:center; margin-bottom:32px;">
+    <div class="wordmark">Rockland Poets</div>
+    <div class="meta" style="color:var(--ink-soft); margin-top:4px;">Organizer sign in</div>
+  </div>
+
+  <div class="card">
+    <label for="email">Email</label>
+    <input type="email" id="email" autocomplete="username" placeholder="you@example.com">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
+
+    <div id="error" class="error-box" style="display:none;"></div>
+
+    <button class="btn-primary" id="loginBtn" style="margin-top:20px;">Sign in</button>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // If already logged in, skip straight to check-in
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) window.location.href = 'checkin.html';
+
+  const emailEl = document.getElementById('email');
+  const passwordEl = document.getElementById('password');
+  const errorEl = document.getElementById('error');
+  const btn = document.getElementById('loginBtn');
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  async function attemptLogin() {
+    errorEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailEl.value.trim(),
+      password: passwordEl.value,
+    });
+
+    if (error) {
+      showError(error.message === 'Invalid login credentials'
+        ? "That email or password isn't right — try again."
+        : error.message);
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+      return;
+    }
+
+    // Confirm this person is actually in organizer_roles, not just any Supabase Auth user
+    const { data: roleRow, error: roleError } = await supabase
+      .from('organizer_roles')
+      .select('role')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+
+    if (roleError || !roleRow) {
+      await supabase.auth.signOut();
+      showError("This account isn't set up as an organizer yet. Ask Bryan to add you.");
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+      return;
+    }
+
+    window.location.href = 'checkin.html';
+  }
+
+  btn.addEventListener('click', attemptLogin);
+  passwordEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+</script>
+</body>
+</html>
