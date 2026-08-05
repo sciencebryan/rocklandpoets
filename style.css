@@ -15,7 +15,7 @@
 
 @font-face {
   font-family: 'Ale Pro';
-  src: url('./fonts/Ale Pro.otf') format('opentype');
+  src: url('./Ale Pro.otf') format('opentype');
   font-weight: 400;
   font-display: swap;
 }
