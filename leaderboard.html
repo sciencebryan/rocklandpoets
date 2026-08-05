@@ -14,13 +14,20 @@
   </div>
 
   <h1 style="font-size:1.4rem; margin-bottom:6px;">End-of-year show eligibility</h1>
-  <p class="meta" style="margin-bottom:20px;">
-    Everyone below has placed 4th or better in a slam at least once, ranked by attendance this season.
+  <p class="meta" style="margin-bottom:16px;">
+    Ranked by attendance this season.
     <span style="display:inline-flex; align-items:center; gap:6px; margin-top:8px;">
       <span style="width:10px; height:10px; border-radius:50%; background:var(--line); display:inline-block;"></span>
       Fewer than 5 visits this season — not yet eligible
     </span>
   </p>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;" id="filterControls">
+    <button class="filter-btn btn-secondary" data-threshold="1" style="width:auto; padding:8px 14px; font-size:0.85rem;">Won only</button>
+    <button class="filter-btn btn-secondary" data-threshold="2" style="width:auto; padding:8px 14px; font-size:0.85rem;">Top 2</button>
+    <button class="filter-btn btn-secondary" data-threshold="3" style="width:auto; padding:8px 14px; font-size:0.85rem;">Top 3</button>
+    <button class="filter-btn btn-primary" data-threshold="4" style="width:auto; padding:8px 14px; font-size:0.85rem;">Top 4</button>
+  </div>
 
   <div id="list"><div class="empty-state">Loading…</div></div>
 </div>
@@ -37,6 +44,9 @@
     return div.innerHTML;
   }
 
+  let allRows = [];
+  let currentThreshold = 4;
+
   async function load() {
     const { data, error } = await supabase.from('public_leaderboard').select('*');
     const listEl = document.getElementById('list');
@@ -45,13 +55,22 @@
       listEl.innerHTML = `<div class="error-box">Couldn't load the leaderboard: ${escapeHtml(error.message)}</div>`;
       return;
     }
-    if (!data || data.length === 0) {
-      listEl.innerHTML = '<div class="empty-state">No one has placed top-4 yet this season.</div>';
+
+    allRows = data || [];
+    render();
+  }
+
+  function render() {
+    const listEl = document.getElementById('list');
+    const filtered = allRows.filter(row => row.best_placement <= currentThreshold);
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">No one meets this criteria yet.</div>';
       return;
     }
 
     listEl.innerHTML = '';
-    for (const row of data) {
+    for (const row of filtered) {
       const eligible = row.season_attendance >= 5;
       const div = document.createElement('div');
       div.className = 'roster-row';
@@ -61,13 +80,23 @@
         <span class="name">${escapeHtml(row.display_name)}</span>
         <span style="text-align:right;">
           <span class="mono" style="font-weight:600;">${row.season_attendance}</span>
-          <span class="meta"> visits this season</span>
-          <span class="meta mono" style="display:block; font-size:0.75rem;">${row.total_attendance} all-time</span>
+          <span class="meta"> this season</span>
+          <span class="meta mono" style="display:block; font-size:0.75rem;">${row.total_attendance} all-time · best #${row.best_placement}</span>
         </span>
       `;
       listEl.appendChild(div);
     }
   }
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentThreshold = parseInt(btn.dataset.threshold, 10);
+      document.querySelectorAll('.filter-btn').forEach(b => b.className = 'filter-btn btn-secondary');
+      btn.className = 'filter-btn btn-primary';
+      Array.from(document.querySelectorAll('.filter-btn')).forEach(b => b.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;');
+      render();
+    });
+  });
 
   load();
 </script>
