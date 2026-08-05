@@ -124,6 +124,16 @@
     window.location.href = 'login.html';
   });
 
+  let myRole = null;
+  {
+    const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
+    myRole = roleRow?.role || null;
+    if (myRole === 'checkin_staff') {
+      const roundEntryLink = document.querySelector('a[href="rounds.html"]');
+      if (roundEntryLink) roundEntryLink.style.display = 'none';
+    }
+  }
+
   // ---- Toast helper ----
   function toast(msg) {
     const el = document.getElementById('toast');
@@ -146,7 +156,14 @@
     if (existing) return existing;
 
     const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr, event_type: eventType }).select().single();
-    if (createError) { toast('Error creating event: ' + createError.message); return null; }
+    if (createError) {
+      if (createError.code === '42501' || createError.message?.includes('policy')) {
+        toast("This event hasn't been started yet — ask an event lead to create it first.");
+      } else {
+        toast('Error creating event: ' + createError.message);
+      }
+      return null;
+    }
     return created;
   }
 
@@ -159,6 +176,14 @@
     const typeLabel = ev.event_type === 'slam' ? 'Slam' : ev.event_type === 'workshop' ? 'Workshop' : 'Open mic';
     document.getElementById('eventLabel').innerHTML =
       `${ev.event_date} · ${typeLabel} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
+    if (myRole === 'admin') {
+      document.getElementById('eventLabel').innerHTML +=
+        ` <a href="#" id="deleteEventLink" style="color:var(--rust); font-size:0.75rem;">(delete)</a>`;
+      document.getElementById('deleteEventLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        confirmDeleteEvent();
+      });
+    }
     document.getElementById('changeEventLink').addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('mainArea').style.display = 'none';
@@ -467,6 +492,46 @@
     await refreshSlamUI();
   }
 
+  async function confirmDeleteEvent() {
+    const [{ count: attCount }, { count: roundCount }, { count: placeCount }, { count: signupCount }] = await Promise.all([
+      supabase.from('attendance').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id),
+      supabase.from('competition_rounds').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id),
+      supabase.from('manual_placements').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id),
+      supabase.from('slam_signups').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id),
+    ]);
+
+    const summary = `This will permanently delete ${currentEvent.event_date} and everything attached to it:\n` +
+      `- ${attCount ?? 0} attendance record(s)\n` +
+      `- ${roundCount ?? 0} poem/round record(s)\n` +
+      `- ${placeCount ?? 0} manual placement record(s)\n` +
+      `- ${signupCount ?? 0} competition sign-up(s)\n\n` +
+      `This cannot be undone. Continue?`;
+
+    if (!confirm(summary)) return;
+
+    const typed = prompt(`Type the event date (${currentEvent.event_date}) to confirm deletion:`);
+    if (typed !== currentEvent.event_date) {
+      toast('Deletion cancelled -- date did not match.');
+      return;
+    }
+
+    const eventId = currentEvent.id;
+    await supabase.from('slam_signups').delete().eq('event_id', eventId);
+    await supabase.from('competition_rounds').delete().eq('event_id', eventId);
+    await supabase.from('manual_placements').delete().eq('event_id', eventId);
+    await supabase.from('attendance').delete().eq('event_id', eventId);
+    const { error } = await supabase.from('events').delete().eq('id', eventId);
+
+    if (error) { toast('Delete failed: ' + error.message); return; }
+
+    toast(`Deleted ${currentEvent.event_date}.`);
+    sessionStorage.removeItem('rp_event_date');
+    sessionStorage.removeItem('rp_event_type');
+    currentEvent = null;
+    document.getElementById('mainArea').style.display = 'none';
+    document.getElementById('eventPicker').style.display = 'block';
+  }
+
   async function removeCheckIn(attendeeId, name) {
     // Clean up any sign-up for this event too, since they shouldn't remain
     // signed up to compete if they weren't actually here
@@ -507,6 +572,7 @@
       slamControls.style.display = 'block';
       const { count } = await supabase.from('slam_signups').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id);
       document.getElementById('signupCount').textContent = count ?? 0;
+      document.getElementById('closeSignupsBtn').style.display = myRole === 'checkin_staff' ? 'none' : 'inline-block';
     }
   }
 
