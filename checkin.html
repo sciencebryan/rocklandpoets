@@ -19,6 +19,11 @@
   <div id="eventPicker" class="card" style="display:none;">
     <label for="eventDate">Tonight's date</label>
     <input type="date" id="eventDate">
+    <label for="eventType">Event type</label>
+    <select id="eventType">
+      <option value="slam">Slam</option>
+      <option value="open_mic">Open mic</option>
+    </select>
     <button class="btn-primary" id="setEventBtn" style="margin-top:14px;">Start / find this event</button>
   </div>
 
@@ -71,6 +76,28 @@
       <button class="btn-ghost" id="cancelAdd" style="margin-top:4px;">Cancel</button>
     </div>
 
+    <div id="signupPrompt" class="card" style="display:none; border-left: 4px solid var(--brass);">
+      <div id="signupPromptText" style="font-weight:600; margin-bottom:10px;"></div>
+      <button class="btn-primary" id="signupYes" style="margin-bottom:8px;">Yes, sign me up</button>
+      <button class="btn-ghost" id="signupNo">No thanks</button>
+    </div>
+
+    <div id="slamControls" class="card" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Sign-ups tonight: <strong id="signupCount" class="mono">0</strong></span>
+        <button class="btn-secondary" id="closeSignupsBtn" style="width:auto; padding:10px 16px;">Close sign-ups & draw</button>
+      </div>
+    </div>
+
+    <div id="drawResults" style="display:none;">
+      <h2 style="font-size:1.1rem; margin-top:20px; margin-bottom:10px;">Tonight's competing order</h2>
+      <div id="competingList"></div>
+      <div id="cutListWrapper" style="display:none; margin-top:16px;">
+        <div class="meta" style="margin-bottom:8px;">Randomized out (still eligible to compete another night):</div>
+        <div id="cutList"></div>
+      </div>
+    </div>
+
     <h2 style="font-size:1.1rem; margin-top:28px; margin-bottom:10px;">Tonight's roster (<span id="rosterCount">0</span>)</h2>
     <div id="roster"></div>
   </div>
@@ -111,30 +138,32 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  async function findOrCreateEvent(dateStr) {
-    let { data: existing, error } = await supabase.from('events').select('id, event_date').eq('event_date', dateStr).maybeSingle();
+  async function findOrCreateEvent(dateStr, eventType) {
+    let { data: existing, error } = await supabase.from('events').select('id, event_date, event_type, signups_closed_at').eq('event_date', dateStr).maybeSingle();
     if (error) { toast('Error loading event: ' + error.message); return null; }
     if (existing) return existing;
 
-    const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr }).select().single();
+    const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr, event_type: eventType }).select().single();
     if (createError) { toast('Error creating event: ' + createError.message); return null; }
     return created;
   }
 
-  async function setEvent(dateStr) {
-    const ev = await findOrCreateEvent(dateStr);
+  async function setEvent(dateStr, eventType) {
+    const ev = await findOrCreateEvent(dateStr, eventType);
     if (!ev) return;
     currentEvent = ev;
-    document.getElementById('eventLabel').textContent = ev.event_date;
+    document.getElementById('eventLabel').textContent = `${ev.event_date} · ${ev.event_type === 'slam' ? 'Slam' : 'Open mic'}`;
     document.getElementById('eventPicker').style.display = 'none';
     document.getElementById('mainArea').style.display = 'block';
     await loadRoster();
+    await refreshSlamUI();
   }
 
   document.getElementById('eventDate').value = todayISO();
   document.getElementById('setEventBtn').addEventListener('click', () => {
     const dateStr = document.getElementById('eventDate').value;
-    if (dateStr) setEvent(dateStr);
+    const eventType = document.getElementById('eventType').value;
+    if (dateStr) setEvent(dateStr, eventType);
   });
 
   // Auto-start with today's event
@@ -244,6 +273,32 @@
     searchEl.value = '';
     resultsEl.innerHTML = '';
     await loadRoster();
+
+    if (currentEvent.event_type === 'slam' && !currentEvent.signups_closed_at) {
+      promptSignup(attendeeId, name);
+    }
+  }
+
+  function promptSignup(attendeeId, name) {
+    document.getElementById('signupPromptText').textContent = `${name} — want to sign up to compete tonight?`;
+    document.getElementById('signupPrompt').style.display = 'block';
+
+    const yesBtn = document.getElementById('signupYes');
+    const noBtn = document.getElementById('signupNo');
+    const newYes = yesBtn.cloneNode(true); yesBtn.replaceWith(newYes); // clear old listeners
+    const newNo = noBtn.cloneNode(true); noBtn.replaceWith(newNo);
+
+    newYes.addEventListener('click', async () => {
+      const { error } = await supabase.from('slam_signups')
+        .upsert({ event_id: currentEvent.id, attendee_id: attendeeId }, { onConflict: 'event_id,attendee_id', ignoreDuplicates: true });
+      if (error) { toast('Sign-up failed: ' + error.message); return; }
+      toast(`Signed up: ${name}`);
+      document.getElementById('signupPrompt').style.display = 'none';
+      await refreshSlamUI();
+    });
+    newNo.addEventListener('click', () => {
+      document.getElementById('signupPrompt').style.display = 'none';
+    });
   }
 
   // ---- Add new attendee ----
@@ -339,6 +394,108 @@
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // ---- Slam sign-ups: counts, close & draw, results ----
+  async function refreshSlamUI() {
+    const slamControls = document.getElementById('slamControls');
+    const drawResults = document.getElementById('drawResults');
+
+    if (currentEvent.event_type !== 'slam') {
+      slamControls.style.display = 'none';
+      drawResults.style.display = 'none';
+      return;
+    }
+
+    if (currentEvent.signups_closed_at) {
+      slamControls.style.display = 'none';
+      await showDrawResults();
+    } else {
+      drawResults.style.display = 'none';
+      slamControls.style.display = 'block';
+      const { count } = await supabase.from('slam_signups').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id);
+      document.getElementById('signupCount').textContent = count ?? 0;
+    }
+  }
+
+  document.getElementById('closeSignupsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('closeSignupsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Drawing…';
+
+    const { data: signups, error } = await supabase.from('slam_signups').select('id, attendee_id').eq('event_id', currentEvent.id);
+    if (error) { toast('Error loading sign-ups: ' + error.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
+
+    if (!signups || signups.length === 0) {
+      toast('No sign-ups to draw from.');
+      btn.disabled = false; btn.textContent = 'Close sign-ups & draw';
+      return;
+    }
+
+    // Fisher-Yates shuffle
+    const shuffled = [...signups];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const competing = shuffled.slice(0, 8);
+    const cut = shuffled.slice(8);
+    const now = new Date().toISOString();
+
+    const updates = [
+      ...competing.map((s, i) => ({ id: s.id, event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: i + 1, randomized_out: false, randomized_out_at: null })),
+      ...cut.map(s => ({ id: s.id, event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: null, randomized_out: true, randomized_out_at: now })),
+    ];
+
+    const { error: upsertError } = await supabase.from('slam_signups').upsert(updates);
+    if (upsertError) { toast('Draw failed: ' + upsertError.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
+
+    const { error: eventError } = await supabase.from('events').update({ signups_closed_at: now }).eq('id', currentEvent.id);
+    if (eventError) { toast('Error closing sign-ups: ' + eventError.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
+
+    currentEvent.signups_closed_at = now;
+    toast('Sign-ups closed, draw complete.');
+    await refreshSlamUI();
+  });
+
+  async function showDrawResults() {
+    const { data: signups, error } = await supabase.from('slam_signups').select('attendee_id, draw_order, randomized_out').eq('event_id', currentEvent.id);
+    if (error) { toast('Error loading draw results: ' + error.message); return; }
+
+    const ids = signups.map(s => s.attendee_id);
+    const { data: names } = await supabase.from('attendee_display').select('id, display_name').in('id', ids.length ? ids : [0]);
+    const nameById = Object.fromEntries((names || []).map(n => [n.id, n.display_name]));
+
+    const competing = signups.filter(s => !s.randomized_out).sort((a, b) => a.draw_order - b.draw_order);
+    const cut = signups.filter(s => s.randomized_out);
+
+    const competingList = document.getElementById('competingList');
+    competingList.innerHTML = '';
+    for (const s of competing) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `<span class="name">${escapeHtml(nameById[s.attendee_id] || '(unknown)')}</span><span class="badge mono">#${s.draw_order}</span>`;
+      competingList.appendChild(row);
+    }
+
+    const cutWrapper = document.getElementById('cutListWrapper');
+    const cutList = document.getElementById('cutList');
+    cutList.innerHTML = '';
+    if (cut.length > 0) {
+      cutWrapper.style.display = 'block';
+      for (const s of cut) {
+        const row = document.createElement('div');
+        row.className = 'roster-row';
+        row.style.borderLeftColor = 'var(--line)';
+        row.innerHTML = `<span class="name">${escapeHtml(nameById[s.attendee_id] || '(unknown)')}</span>`;
+        cutList.appendChild(row);
+      }
+    } else {
+      cutWrapper.style.display = 'none';
+    }
+
+    document.getElementById('drawResults').style.display = 'block';
   }
 </script>
 </body>
