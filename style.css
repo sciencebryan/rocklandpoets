@@ -1,29 +1,41 @@
 /* ============================================================
-   Rockland Poets — shared design tokens
-   Palette: paper #F7F2E9, ink #241F26, wine #7A2048 (primary accent),
-            brass #B08D57 (secondary/highlight), moss #4B5D45 (success),
-            rust #A6402F (error/destructive only)
-   Type: Fraunces (display, literary character) + Inter (UI, legibility
-         on tablets) + IBM Plex Mono (data: dates, counts, round numbers)
+   Rockland Poets — brand design tokens
+   Palette (official brand colors):
+     cyan1 #C5F6FA  cyan5 #22B8CF  cyan9 #0B7285
+     gray1 #F1F3F5  gray5 #ADB5BD  gray9 #212529
+   Type: Roboto (UI/body) + Ale Pro (display/headers).
+   NOTE on Ale Pro: it's a commercial font. Drop your licensed
+   "Ale Pro.otf" file into a /fonts folder next to this CSS file
+   (same folder as login.html etc.) and it'll load automatically.
+   Only one weight is wired up below since that's what's on hand --
+   the browser will synthesize bold from it as needed.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+@font-face {
+  font-family: 'Ale Pro';
+  src: url('./fonts/Ale Pro.otf') format('opentype');
+  font-weight: 400;
+  font-display: swap;
+}
 
 :root {
-  --paper: #F7F2E9;
-  --paper-raised: #FFFDF8;
-  --ink: #241F26;
-  --ink-soft: #5A5460;
-  --wine: #7A2048;
-  --wine-dark: #5C1836;
-  --brass: #B08D57;
-  --moss: #4B5D45;
-  --moss-bg: #E8EDE4;
-  --rust: #A6402F;
-  --rust-bg: #F5E4E0;
-  --line: #E3DACB;
+  --paper: #F1F3F5;        /* gray1 */
+  --paper-raised: #FFFFFF;
+  --ink: #212529;          /* gray9 */
+  --ink-soft: #6B7278;     /* darkened gray5 slightly for body-text contrast */
+  --wine: #0B7285;         /* cyan9 -- primary accent */
+  --wine-dark: #095E6E;    /* cyan9, darkened for hover states */
+  --brass: #22B8CF;        /* cyan5 -- secondary accent / highlight */
+  --moss: #0B7285;         /* cyan9 -- success state (brand has no green, cyan doubles for this) */
+  --moss-bg: #C5F6FA;      /* cyan1 -- success background */
+  --rust: #C92A2A;         /* not a brand color -- kept red for error states since that's a strong,
+                               near-universal accessibility convention worth not breaking */
+  --rust-bg: #FBE4E4;
+  --line: #ADB5BD;         /* gray5 */
   --radius: 10px;
-  --shadow: 0 2px 8px rgba(36, 31, 38, 0.08);
+  --shadow: 0 2px 8px rgba(33, 37, 41, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -32,32 +44,31 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Roboto', system-ui, sans-serif;
   font-size: 17px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, .display {
-  font-family: 'Fraunces', serif;
-  font-weight: 600;
+  font-family: 'Ale Pro', 'Roboto', serif;
+  font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0;
 }
 
 .wordmark {
-  font-family: 'Fraunces', serif;
-  font-style: italic;
-  font-weight: 500;
+  font-family: 'Ale Pro', 'Roboto', serif;
+  font-weight: 700;
   color: var(--wine);
   font-size: 1.6rem;
   letter-spacing: -0.01em;
 }
 
 .mono {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: 'Roboto', sans-serif;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.01em;
 }
 
 .page {
@@ -111,7 +122,7 @@ label {
 }
 
 button {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-weight: 600;
   font-size: 1.02rem;
   border: none;
