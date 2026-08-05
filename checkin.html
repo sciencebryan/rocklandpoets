@@ -385,9 +385,41 @@
     for (const row of attendanceRows) {
       const div = document.createElement('div');
       div.className = 'roster-row checked-in';
-      div.innerHTML = `<span class="name">${escapeHtml(nameById[row.attendee_id] || '(unknown)')}</span><span class="badge">✓ here</span>`;
+      const name = nameById[row.attendee_id] || '(unknown)';
+      div.innerHTML = `<span class="name">${escapeHtml(name)}</span>`;
+
+      const rightSide = document.createElement('span');
+      rightSide.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      rightSide.innerHTML = `<span class="badge">✓ here</span>`;
+
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = 'Remove';
+      removeBtn.className = 'btn-ghost';
+      removeBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+      removeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Remove ${name} from tonight's check-in? This can't be undone here.`)) return;
+        await removeCheckIn(row.attendee_id, name);
+      });
+      rightSide.appendChild(removeBtn);
+      div.appendChild(rightSide);
       rosterEl.appendChild(div);
     }
+  }
+
+  async function removeCheckIn(attendeeId, name) {
+    // Clean up any sign-up for this event too, since they shouldn't remain
+    // signed up to compete if they weren't actually here
+    await supabase.from('slam_signups').delete().eq('event_id', currentEvent.id).eq('attendee_id', attendeeId);
+
+    const { error } = await supabase.from('attendance').delete()
+      .eq('event_id', currentEvent.id).eq('attendee_id', attendeeId);
+
+    if (error) { toast('Could not remove: ' + error.message); return; }
+
+    toast(`Removed: ${name}`);
+    await loadRoster();
+    await refreshSlamUI();
   }
 
   function escapeHtml(str) {
