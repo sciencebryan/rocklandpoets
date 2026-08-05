@@ -80,8 +80,8 @@
         <span class="name">${escapeHtml(row.display_name)}</span>
         <span style="text-align:right;">
           <span class="mono" style="font-weight:600;">${row.season_attendance}</span>
-          <span class="meta"> this season</span>
-          <span class="meta mono" style="display:block; font-size:0.75rem;">${row.total_attendance} all-time · best #${row.best_placement}</span>
+          <span class="meta"> visits this season</span>
+          <span class="meta mono" style="display:block; font-size:0.75rem;">${row.total_attendance} all-time attendance · best placement this season #${row.best_placement}</span>
         </span>
       `;
       listEl.appendChild(div);
