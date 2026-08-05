@@ -11,7 +11,7 @@
   <div class="header">
     <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
     <div style="text-align:right;">
-      <div class="meta mono" id="eventLabel">loading…</div>
+      <div class="meta mono" id="eventLabel">No event selected</div>
       <a href="rounds.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">Round entry</a> ·
       <button class="btn-ghost" id="signOutBtn" style="padding:2px 0; min-height:auto; font-size:0.8rem;">Sign out</button>
     </div>
@@ -153,7 +153,15 @@
     const ev = await findOrCreateEvent(dateStr, eventType);
     if (!ev) return;
     currentEvent = ev;
-    document.getElementById('eventLabel').textContent = `${ev.event_date} · ${ev.event_type === 'slam' ? 'Slam' : 'Open mic'}`;
+    sessionStorage.setItem('rp_event_date', ev.event_date);
+    sessionStorage.setItem('rp_event_type', ev.event_type);
+    document.getElementById('eventLabel').innerHTML =
+      `${ev.event_date} · ${ev.event_type === 'slam' ? 'Slam' : 'Open mic'} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
+    document.getElementById('changeEventLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('mainArea').style.display = 'none';
+      document.getElementById('eventPicker').style.display = 'block';
+    });
     document.getElementById('eventPicker').style.display = 'none';
     document.getElementById('mainArea').style.display = 'block';
     await loadRoster();
@@ -167,9 +175,15 @@
     if (dateStr) setEvent(dateStr, eventType);
   });
 
-  // Auto-start with today's event
-  document.getElementById('eventDate').value = todayISO();
-  document.getElementById('eventPicker').style.display = 'block';
+  // Resume the previously selected event if there is one, otherwise show the picker
+  const savedDate = sessionStorage.getItem('rp_event_date');
+  const savedType = sessionStorage.getItem('rp_event_type');
+  if (savedDate) {
+    setEvent(savedDate, savedType || 'slam');
+  } else {
+    document.getElementById('eventDate').value = todayISO();
+    document.getElementById('eventPicker').style.display = 'block';
+  }
 
   // ---- Search ----
   const searchEl = document.getElementById('search');

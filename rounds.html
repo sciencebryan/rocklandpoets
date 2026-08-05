@@ -11,7 +11,7 @@
   <div class="header">
     <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
     <div style="text-align:right;">
-      <div class="meta mono" id="eventLabel">loading…</div>
+      <div class="meta mono" id="eventLabel">No event selected</div>
       <a href="checkin.html" class="btn-ghost" style="font-size:0.8rem; text-decoration:none; display:inline-block; padding:2px 0;">← Check-in</a>
     </div>
   </div>
@@ -73,8 +73,8 @@
 
   document.getElementById('loadEventBtn').addEventListener('click', loadEvent);
 
-  async function loadEvent() {
-    const dateStr = document.getElementById('eventDate').value;
+  async function loadEvent(dateOverride) {
+    const dateStr = dateOverride || document.getElementById('eventDate').value;
     const errEl = document.getElementById('eventPickerError');
     errEl.style.display = 'none';
 
@@ -85,7 +85,15 @@
     if (!ev.signups_closed_at) { errEl.textContent = "Sign-ups haven't been closed yet — do that on the check-in page first."; errEl.style.display = 'block'; return; }
 
     currentEvent = ev;
-    document.getElementById('eventLabel').textContent = `${ev.event_date} · Slam`;
+    sessionStorage.setItem('rp_event_date', ev.event_date);
+    sessionStorage.setItem('rp_event_type', ev.event_type);
+    document.getElementById('eventLabel').innerHTML =
+      `${ev.event_date} · Slam <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
+    document.getElementById('changeEventLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('mainArea').style.display = 'none';
+      document.getElementById('eventPicker').style.display = 'block';
+    });
     document.getElementById('eventPicker').style.display = 'none';
     document.getElementById('mainArea').style.display = 'block';
 
@@ -93,6 +101,10 @@
     await renderRoundTabs();
     await showRound(1);
   }
+
+  // Resume whatever event was selected on the check-in page, if any
+  const savedDate = sessionStorage.getItem('rp_event_date');
+  if (savedDate) loadEvent(savedDate);
 
   async function loadNames() {
     const { data } = await supabase.from('attendee_display').select('id, display_name');
