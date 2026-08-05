@@ -24,6 +24,7 @@
     <select id="eventType">
       <option value="slam">Slam</option>
       <option value="open_mic">Open mic</option>
+      <option value="workshop">Workshop</option>
     </select>
     <button class="btn-primary" id="setEventBtn" style="margin-top:14px;">Start / find this event</button>
   </div>
@@ -155,8 +156,9 @@
     currentEvent = ev;
     sessionStorage.setItem('rp_event_date', ev.event_date);
     sessionStorage.setItem('rp_event_type', ev.event_type);
+    const typeLabel = ev.event_type === 'slam' ? 'Slam' : ev.event_type === 'workshop' ? 'Workshop' : 'Open mic';
     document.getElementById('eventLabel').innerHTML =
-      `${ev.event_date} · ${ev.event_type === 'slam' ? 'Slam' : 'Open mic'} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
+      `${ev.event_date} · ${typeLabel} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
     document.getElementById('changeEventLink').addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('mainArea').style.display = 'none';

@@ -81,7 +81,7 @@
     const { data: ev, error } = await supabase.from('events').select('*').eq('event_date', dateStr).maybeSingle();
     if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
     if (!ev) { errEl.textContent = "No event found for that date. Start it from the check-in page first."; errEl.style.display = 'block'; return; }
-    if (ev.event_type !== 'slam') { errEl.textContent = "This is an open mic night — no rounds to score."; errEl.style.display = 'block'; return; }
+    if (ev.event_type !== 'slam') { errEl.textContent = "This isn't a slam night — no rounds to score."; errEl.style.display = 'block'; return; }
     if (!ev.signups_closed_at) { errEl.textContent = "Sign-ups haven't been closed yet — do that on the check-in page first."; errEl.style.display = 'block'; return; }
 
     currentEvent = ev;
