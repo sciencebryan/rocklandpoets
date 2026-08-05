@@ -477,11 +477,11 @@
     const now = new Date().toISOString();
 
     const updates = [
-      ...competing.map((s, i) => ({ id: s.id, event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: i + 1, randomized_out: false, randomized_out_at: null })),
-      ...cut.map(s => ({ id: s.id, event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: null, randomized_out: true, randomized_out_at: now })),
+      ...competing.map((s, i) => ({ event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: i + 1, randomized_out: false, randomized_out_at: null })),
+      ...cut.map(s => ({ event_id: currentEvent.id, attendee_id: s.attendee_id, draw_order: null, randomized_out: true, randomized_out_at: now })),
     ];
 
-    const { error: upsertError } = await supabase.from('slam_signups').upsert(updates);
+    const { error: upsertError } = await supabase.from('slam_signups').upsert(updates, { onConflict: 'event_id,attendee_id' });
     if (upsertError) { toast('Draw failed: ' + upsertError.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
 
     const { error: eventError } = await supabase.from('events').update({ signups_closed_at: now }).eq('id', currentEvent.id);

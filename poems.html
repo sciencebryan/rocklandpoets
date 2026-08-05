@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Poem Lookup</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="leaderboard.html" style="font-size:0.85rem; color:var(--wine); text-decoration:none;">← Leaderboard</a>
+  </div>
+
+  <h1 style="font-size:1.4rem; margin-bottom:6px;">What have I read?</h1>
+  <p class="meta" style="margin-bottom:20px;">Find your name to see every poem you've read at a slam — handy for the no-repeat rule.</p>
+
+  <input type="text" id="search" placeholder="Type your name…" autocomplete="off" style="margin-bottom:12px;">
+
+  <div id="results"></div>
+
+  <div id="confirmPanel" class="card" style="display:none; border-left: 4px solid var(--brass);">
+    <div style="font-weight:600; margin-bottom:8px;">Which one is you?</div>
+    <div id="confirmList"></div>
+    <button class="btn-ghost" id="cancelConfirm" style="margin-top:8px;">Never mind</button>
+  </div>
+
+  <div id="poemHistory"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  const searchEl = document.getElementById('search');
+  const resultsEl = document.getElementById('results');
+  const historyEl = document.getElementById('poemHistory');
+  let searchDebounce;
+
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(runSearch, 250);
+  });
+
+  async function runSearch() {
+    const q = searchEl.value.trim();
+    resultsEl.innerHTML = '';
+    historyEl.innerHTML = '';
+    document.getElementById('confirmPanel').style.display = 'none';
+    if (q.length < 2) return;
+
+    const { data, error } = await supabase.from('attendee_display').select('id, display_name').ilike('display_name', `%${q}%`).limit(15);
+    if (error) { resultsEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) {
+      resultsEl.innerHTML = '<div class="empty-state">No match found.</div>';
+      return;
+    }
+
+    const uniqueNames = [...new Set(data.map(d => d.display_name))];
+    for (const name of uniqueNames) {
+      const matches = data.filter(d => d.display_name === name);
+      const row = document.createElement('button');
+      row.className = 'roster-row';
+      row.style.cssText += 'border:1px solid var(--line); border-left:4px solid var(--brass); cursor:pointer; font-family:inherit;';
+      row.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="meta">Tap to view</span>`;
+      row.addEventListener('click', () => selectName(name, matches));
+      resultsEl.appendChild(row);
+    }
+  }
+
+  async function selectName(name, matches) {
+    const { data: candidates } = await supabase.from('attendee_confirm_candidates').select('id, disambiguator').eq('base_name', name);
+
+    if (candidates && candidates.length > 1) {
+      const panel = document.getElementById('confirmPanel');
+      const list = document.getElementById('confirmList');
+      list.innerHTML = '';
+      for (const c of candidates) {
+        const btn = document.createElement('button');
+        btn.className = 'roster-row';
+        btn.style.cssText += 'border:1px solid var(--line); border-left:4px solid var(--brass); cursor:pointer; font-family:inherit;';
+        btn.innerHTML = `<span class="name">${escapeHtml(name)}</span><span class="mono meta">${escapeHtml(c.disambiguator || '')}</span>`;
+        btn.addEventListener('click', () => { panel.style.display = 'none'; showHistory(c.id, name); });
+        list.appendChild(btn);
+      }
+      panel.style.display = 'block';
+    } else {
+      showHistory(matches[0].id, name);
+    }
+  }
+
+  document.getElementById('cancelConfirm').addEventListener('click', () => {
+    document.getElementById('confirmPanel').style.display = 'none';
+  });
+
+  async function showHistory(attendeeId, name) {
+    resultsEl.innerHTML = '';
+    document.getElementById('confirmPanel').style.display = 'none';
+
+    const { data: poems, error } = await supabase.from('poems_read').select('poem_title, event_id').eq('attendee_id', attendeeId);
+    if (error) { historyEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+
+    if (!poems || poems.length === 0) {
+      historyEl.innerHTML = `<h2 style="font-size:1.1rem; margin:16px 0 10px;">${escapeHtml(name)}</h2><div class="empty-state">No poems on record yet.</div>`;
+      return;
+    }
+
+    const eventIds = [...new Set(poems.map(p => p.event_id))];
+    const { data: events } = await supabase.from('events').select('id, event_date').in('id', eventIds);
+    const dateById = Object.fromEntries((events || []).map(e => [e.id, e.event_date]));
+
+    const sorted = [...poems].sort((a, b) => (dateById[b.event_id] || '').localeCompare(dateById[a.event_id] || ''));
+
+    historyEl.innerHTML = `<h2 style="font-size:1.1rem; margin:16px 0 10px;">${escapeHtml(name)} — ${poems.length} poem${poems.length === 1 ? '' : 's'}</h2>`;
+    for (const p of sorted) {
+      const div = document.createElement('div');
+      div.className = 'roster-row';
+      div.innerHTML = `<span class="name">${escapeHtml(p.poem_title)}</span><span class="meta mono">${escapeHtml(dateById[p.event_id] || '')}</span>`;
+      historyEl.appendChild(div);
+    }
+  }
+</script>
+</body>
+</html>

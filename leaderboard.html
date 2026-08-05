@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Leaderboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="poems.html" style="font-size:0.85rem; color:var(--wine); text-decoration:none;">Poem lookup →</a>
+  </div>
+
+  <h1 style="font-size:1.4rem; margin-bottom:6px;">End-of-year show eligibility</h1>
+  <p class="meta" style="margin-bottom:20px;">
+    Everyone below has placed 4th or better in a slam at least once, ranked by attendance this season.
+    <span style="display:inline-flex; align-items:center; gap:6px; margin-top:8px;">
+      <span style="width:10px; height:10px; border-radius:50%; background:var(--line); display:inline-block;"></span>
+      Fewer than 5 visits this season — not yet eligible
+    </span>
+  </p>
+
+  <div id="list"><div class="empty-state">Loading…</div></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function load() {
+    const { data, error } = await supabase.from('public_leaderboard').select('*');
+    const listEl = document.getElementById('list');
+
+    if (error) {
+      listEl.innerHTML = `<div class="error-box">Couldn't load the leaderboard: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">No one has placed top-4 yet this season.</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    for (const row of data) {
+      const eligible = row.season_attendance >= 5;
+      const div = document.createElement('div');
+      div.className = 'roster-row';
+      div.style.borderLeftColor = eligible ? 'var(--brass)' : 'var(--line)';
+      if (!eligible) div.style.opacity = '0.6';
+      div.innerHTML = `
+        <span class="name">${escapeHtml(row.display_name)}</span>
+        <span style="text-align:right;">
+          <span class="mono" style="font-weight:600;">${row.season_attendance}</span>
+          <span class="meta"> this season</span>
+          <span class="meta mono" style="display:block; font-size:0.75rem;">${row.total_attendance} all-time</span>
+        </span>
+      `;
+      listEl.appendChild(div);
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
