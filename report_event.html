@@ -102,9 +102,10 @@
       const names = await fetchNames(allIds);
 
       const placementLabel = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' };
-      const placementLines = (placements || []).map(p => `<div>${placementLabel[p.placement] || p.placement}: ${escapeHtml(names[p.attendee_id])}</div>`).join('');
+      const personLink = (id, text) => `<a href="report_person.html?id=${id}" style="color:var(--wine); text-decoration:underline;">${escapeHtml(text)}</a>`;
+      const placementLines = (placements || []).map(p => `<div>${placementLabel[p.placement] || p.placement}: ${personLink(p.attendee_id, names[p.attendee_id])}</div>`).join('');
       const cutLines = (cutRows || []).length
-        ? (cutRows.map(c => escapeHtml(names[c.attendee_id])).join(', '))
+        ? (cutRows.map(c => personLink(c.attendee_id, names[c.attendee_id])).join(', '))
         : 'No one';
 
       const roundsByNumber = {};
@@ -114,7 +115,7 @@
       const roundsHtml = Object.entries(roundsByNumber).map(([num, rows]) => `
         <div style="margin-top:8px;">
           <strong>Round ${num}</strong>
-          ${rows.map(r => `<div class="roster-row"><span class="name">${escapeHtml(names[r.attendee_id])} — ${escapeHtml(r.poem_title)}</span><span class="mono meta">${r.votes ?? '—'}v</span></div>`).join('')}
+          ${rows.map(r => `<div class="roster-row"><span class="name">${personLink(r.attendee_id, names[r.attendee_id])} — ${escapeHtml(r.poem_title)}</span><span class="mono meta">${r.votes ?? '—'}v</span></div>`).join('')}
         </div>
       `).join('');
 

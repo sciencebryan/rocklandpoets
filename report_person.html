@@ -71,6 +71,10 @@
     return data?.start_date || null;
   }
 
+  // Support linking directly to a person via ?id=123 (e.g. from the event report)
+  const urlId = new URLSearchParams(window.location.search).get('id');
+  if (urlId) runReport(parseInt(urlId, 10));
+
   function daysBetween(a, b) {
     return Math.round((new Date(b) - new Date(a)) / 86400000);
   }
