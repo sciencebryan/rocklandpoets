@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Manage Book Club</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="book_club.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">View public page</a>
+  </div>
+
+  <div id="deniedNotice" style="display:none;" class="error-box">
+    This page is for event leads and above.
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <h1 style="font-size:1.3rem; margin-bottom:16px;">Manage book club</h1>
+
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:4px;" id="formTitle">Add a new pick</div>
+      <label for="meetingDate">Meeting date</label>
+      <input type="date" id="meetingDate">
+      <label for="bookTitle">Book title</label>
+      <input type="text" id="bookTitle">
+      <label for="bookAuthor">Author</label>
+      <input type="text" id="bookAuthor">
+      <label for="description">Description / notes (optional)</label>
+      <input type="text" id="description">
+      <label for="linkUrl">Link (optional -- Goodreads, purchase page, etc.)</label>
+      <input type="text" id="linkUrl">
+
+      <div id="formError" class="error-box" style="display:none;"></div>
+
+      <button class="btn-primary" id="saveBtn" style="margin-top:16px;">Save</button>
+      <button class="btn-ghost" id="cancelBtn" style="display:none;">Cancel edit</button>
+    </div>
+
+    <div id="focusPoemsSection" class="card" style="display:none;">
+      <div style="font-weight:600; margin-bottom:8px;">Focus poems</div>
+      <div class="meta" style="margin-bottom:12px;">For people who don't have time to read the whole book.</div>
+      <div id="focusPoemsList"></div>
+
+      <label for="fpTitle">Poem title</label>
+      <input type="text" id="fpTitle">
+      <label for="fpPage">Page number</label>
+      <input type="text" id="fpPage" placeholder="e.g. 42 or xii or 12-14">
+      <label for="fpLink">Link to a free copy (optional)</label>
+      <input type="text" id="fpLink">
+      <button class="btn-secondary" id="addFocusPoemBtn" style="margin-top:12px;">Add focus poem</button>
+    </div>
+
+    <h2 style="font-size:1.1rem; margin-top:28px; margin-bottom:10px;">All picks</h2>
+    <div id="list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
+  const myRole = roleRow?.role;
+  const allowed = ['event_lead', 'organizer', 'admin'].includes(myRole);
+
+  if (!allowed) {
+    document.getElementById('deniedNotice').style.display = 'block';
+  } else {
+    document.getElementById('mainArea').style.display = 'block';
+  }
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  // Suggest the next first-Thursday-of-the-month as a default
+  function nextFirstThursday() {
+    const d = new Date();
+    d.setDate(1);
+    while (d.getDay() !== 4) d.setDate(d.getDate() + 1); // 4 = Thursday
+    if (d < new Date()) {
+      d.setMonth(d.getMonth() + 1, 1);
+      while (d.getDay() !== 4) d.setDate(d.getDate() + 1);
+    }
+    return d.toISOString().slice(0, 10);
+  }
+  document.getElementById('meetingDate').value = nextFirstThursday();
+
+  let editingId = null;
+
+  function resetForm() {
+    editingId = null;
+    document.getElementById('formTitle').textContent = 'Add a new pick';
+    document.getElementById('meetingDate').value = nextFirstThursday();
+    document.getElementById('bookTitle').value = '';
+    document.getElementById('bookAuthor').value = '';
+    document.getElementById('description').value = '';
+    document.getElementById('linkUrl').value = '';
+    document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('formError').style.display = 'none';
+    document.getElementById('focusPoemsSection').style.display = 'none';
+  }
+
+  document.getElementById('cancelBtn').addEventListener('click', resetForm);
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('formError');
+    errEl.style.display = 'none';
+
+    const title = document.getElementById('bookTitle').value.trim();
+    const meetingDate = document.getElementById('meetingDate').value;
+    if (!title) { errEl.textContent = 'Book title is required.'; errEl.style.display = 'block'; return; }
+    if (!meetingDate) { errEl.textContent = 'Meeting date is required.'; errEl.style.display = 'block'; return; }
+
+    const payload = {
+      meeting_date: meetingDate,
+      book_title: title,
+      book_author: document.getElementById('bookAuthor').value.trim() || null,
+      description: document.getElementById('description').value.trim() || null,
+      link_url: document.getElementById('linkUrl').value.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    let error, newId;
+    if (editingId) {
+      ({ error } = await supabase.from('book_club_selections').update(payload).eq('id', editingId));
+    } else {
+      payload.created_by = session.user.id;
+      const result = await supabase.from('book_club_selections').insert(payload).select().single();
+      error = result.error;
+      newId = result.data?.id;
+    }
+
+    if (error) {
+      errEl.textContent = error.code === '23505'
+        ? "There's already a pick for that date -- edit the existing one instead, or pick a different date."
+        : 'Save failed: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    toast('Saved.');
+    if (newId) editingId = newId;
+    document.getElementById('formTitle').textContent = `Editing: ${title}`;
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+    document.getElementById('focusPoemsSection').style.display = 'block';
+    loadFocusPoems();
+    loadList();
+  });
+
+  async function loadFocusPoems() {
+    if (!editingId) return;
+    const { data, error } = await supabase.from('book_club_focus_poems').select('*').eq('selection_id', editingId).order('sort_order', { ascending: true });
+    const listEl = document.getElementById('focusPoemsList');
+    if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No focus poems added yet.</div>'; return; }
+
+    listEl.innerHTML = '';
+    for (const p of data) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `<span class="name">${escapeHtml(p.poem_title)}${p.page_number ? ` <span class="meta">(p. ${escapeHtml(p.page_number)})</span>` : ''}</span>`;
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Remove';
+      delBtn.className = 'btn-ghost';
+      delBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+      delBtn.addEventListener('click', async () => {
+        const { error } = await supabase.from('book_club_focus_poems').delete().eq('id', p.id);
+        if (error) { toast('Could not remove: ' + error.message); return; }
+        loadFocusPoems();
+      });
+      row.appendChild(delBtn);
+      listEl.appendChild(row);
+    }
+  }
+
+  document.getElementById('addFocusPoemBtn').addEventListener('click', async () => {
+    if (!editingId) return;
+    const title = document.getElementById('fpTitle').value.trim();
+    if (!title) { toast('Poem title is required.'); return; }
+
+    const { error } = await supabase.from('book_club_focus_poems').insert({
+      selection_id: editingId,
+      poem_title: title,
+      page_number: document.getElementById('fpPage').value.trim() || null,
+      link_url: document.getElementById('fpLink').value.trim() || null,
+    });
+    if (error) { toast('Could not add: ' + error.message); return; }
+
+    document.getElementById('fpTitle').value = '';
+    document.getElementById('fpPage').value = '';
+    document.getElementById('fpLink').value = '';
+    toast('Focus poem added.');
+    loadFocusPoems();
+  });
+
+  async function loadList() {
+    const { data, error } = await supabase.from('book_club_selections').select('*').order('meeting_date', { ascending: false });
+    const listEl = document.getElementById('list');
+    if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No picks yet.</div>'; return; }
+
+    listEl.innerHTML = '';
+    for (const b of data) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `
+        <span class="name">${escapeHtml(b.book_title)} <span class="meta">(${escapeHtml(b.meeting_date)})</span></span>
+        <span></span>
+      `;
+      const controls = document.createElement('span');
+      controls.style.cssText = 'display:flex; gap:8px;';
+
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'btn-ghost';
+      editBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem;';
+      editBtn.addEventListener('click', () => {
+        editingId = b.id;
+        document.getElementById('formTitle').textContent = `Editing: ${b.book_title}`;
+        document.getElementById('meetingDate').value = b.meeting_date;
+        document.getElementById('bookTitle').value = b.book_title;
+        document.getElementById('bookAuthor').value = b.book_author || '';
+        document.getElementById('description').value = b.description || '';
+        document.getElementById('linkUrl').value = b.link_url || '';
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        document.getElementById('focusPoemsSection').style.display = 'block';
+        loadFocusPoems();
+        window.scrollTo(0, 0);
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'btn-ghost';
+      deleteBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete "${b.book_title}"?`)) return;
+        const { error } = await supabase.from('book_club_selections').delete().eq('id', b.id);
+        if (error) { toast('Delete failed: ' + error.message); return; }
+        toast('Deleted.');
+        loadList();
+      });
+
+      controls.appendChild(editBtn);
+      controls.appendChild(deleteBtn);
+      row.querySelector('span:last-child').replaceWith(controls);
+      listEl.appendChild(row);
+    }
+  }
+
+  if (allowed) loadList();
+</script>
+</body>
+</html>

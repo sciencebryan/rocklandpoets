@@ -133,6 +133,16 @@
       const roundEntryLink = document.querySelector('a[href="rounds.html"]');
       if (roundEntryLink) roundEntryLink.style.display = 'none';
     }
+    if (myRole === 'event_lead' || myRole === 'organizer' || myRole === 'admin') {
+      const roundEntryLink = document.querySelector('a[href="rounds.html"]');
+      if (roundEntryLink) {
+        const bookClubLink = document.createElement('a');
+        bookClubLink.href = 'manage_book_club.html';
+        bookClubLink.textContent = 'Book club';
+        bookClubLink.style.cssText = 'font-size:0.8rem; color:var(--wine); text-decoration:none; margin-left:8px;';
+        roundEntryLink.after(bookClubLink);
+      }
+    }
     if (myRole === 'organizer' || myRole === 'admin') {
       const roundEntryLink = document.querySelector('a[href="rounds.html"]');
       if (roundEntryLink) {

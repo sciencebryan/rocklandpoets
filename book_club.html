@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Book Club</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="leaderboard.html" style="font-size:0.85rem; color:var(--wine); text-decoration:none;">Leaderboard</a>
+  </div>
+
+  <h1 style="font-size:1.4rem; margin-bottom:6px;">Poetry Book Club</h1>
+  <p class="meta" style="margin-bottom:20px;">We meet the first Thursday of each month.</p>
+
+  <div id="current"></div>
+
+  <h2 style="font-size:1.1rem; margin-top:28px; margin-bottom:10px;">Past books</h2>
+  <div id="history"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function bookCard(b, isCurrent, focusPoems) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    if (isCurrent) div.style.borderLeft = '4px solid var(--brass)';
+    const poemsHtml = (focusPoems && focusPoems.length)
+      ? `<div style="margin-top:10px;">
+          <div class="meta" style="font-weight:600; margin-bottom:4px;">Focus poems (for those short on time):</div>
+          ${focusPoems.map(p => `
+            <div style="margin-bottom:4px;">
+              ${escapeHtml(p.poem_title)}${p.page_number ? ` <span class="meta">(p. ${escapeHtml(p.page_number)})</span>` : ''}
+              ${p.link_url ? ` — <a href="${escapeHtml(p.link_url)}" target="_blank" style="color:var(--wine);">free copy</a>` : ''}
+            </div>
+          `).join('')}
+        </div>`
+      : '';
+    div.innerHTML = `
+      <div class="mono meta">${escapeHtml(b.meeting_date)}</div>
+      <div style="font-weight:600; font-size:1.05rem; margin-top:4px;">${escapeHtml(b.book_title)}</div>
+      ${b.book_author ? `<div class="meta">${escapeHtml(b.book_author)}</div>` : ''}
+      ${b.description ? `<div style="margin-top:8px;">${escapeHtml(b.description)}</div>` : ''}
+      ${b.link_url ? `<div style="margin-top:8px;"><a href="${escapeHtml(b.link_url)}" target="_blank" style="color:var(--wine);">More info →</a></div>` : ''}
+      ${poemsHtml}
+    `;
+    return div;
+  }
+
+  async function load() {
+    const { data, error } = await supabase.from('book_club_selections').select('*').order('meeting_date', { ascending: false });
+    const currentEl = document.getElementById('current');
+    const historyEl = document.getElementById('history');
+
+    if (error) { currentEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { currentEl.innerHTML = '<div class="empty-state">No book selected yet.</div>'; return; }
+
+    const selectionIds = data.map(b => b.id);
+    const { data: focusPoemRows } = await supabase.from('book_club_focus_poems').select('*').in('selection_id', selectionIds).order('sort_order', { ascending: true });
+    const focusPoemsBySelection = {};
+    for (const p of focusPoemRows || []) {
+      (focusPoemsBySelection[p.selection_id] ||= []).push(p);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = data.filter(b => b.meeting_date >= today).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date))[0];
+    const current = upcoming || data[0];
+
+    currentEl.appendChild(bookCard(current, true, focusPoemsBySelection[current.id]));
+
+    const rest = data.filter(b => b.id !== current.id);
+    if (rest.length === 0) {
+      historyEl.innerHTML = '<div class="empty-state">No past books yet.</div>';
+    } else {
+      for (const b of rest) historyEl.appendChild(bookCard(b, false, focusPoemsBySelection[b.id]));
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
