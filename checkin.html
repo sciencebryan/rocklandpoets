@@ -132,6 +132,16 @@
       const roundEntryLink = document.querySelector('a[href="rounds.html"]');
       if (roundEntryLink) roundEntryLink.style.display = 'none';
     }
+    if (myRole === 'organizer' || myRole === 'admin') {
+      const roundEntryLink = document.querySelector('a[href="rounds.html"]');
+      if (roundEntryLink) {
+        const editLink = document.createElement('a');
+        editLink.href = 'edit_attendee.html';
+        editLink.textContent = 'Edit attendee';
+        editLink.style.cssText = 'font-size:0.8rem; color:var(--wine); text-decoration:none; margin-left:8px;';
+        roundEntryLink.after(editLink);
+      }
+    }
   }
 
   // ---- Toast helper ----
@@ -398,7 +408,7 @@
     if (!currentEvent) return;
     const { data: attendanceRows, error } = await supabase
       .from('attendance')
-      .select('id, attendee_id')
+      .select('id, attendee_id, stage_name_for_event')
       .eq('event_id', currentEvent.id)
       .order('id', { ascending: true });
 
@@ -437,10 +447,28 @@
       const div = document.createElement('div');
       div.className = 'roster-row checked-in';
       const name = nameById[row.attendee_id] || '(unknown)';
-      div.innerHTML = `<span class="name">${escapeHtml(name)}</span>`;
+      const stageName = row.stage_name_for_event;
+      div.innerHTML = `<span class="name">${escapeHtml(name)}${stageName ? ` <span class="meta">(as ${escapeHtml(stageName)} tonight)</span>` : ''}</span>`;
 
       const rightSide = document.createElement('span');
       rightSide.style.cssText = 'display:flex; align-items:center; gap:8px;';
+
+      const stageBtn = document.createElement('button');
+      stageBtn.textContent = stageName ? 'Edit stage name' : 'Stage name';
+      stageBtn.className = 'btn-ghost';
+      stageBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem;';
+      stageBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const typed = prompt(`Stage name for ${name} tonight (leave blank to clear):`, stageName || '');
+        if (typed === null) return; // cancelled
+        const { error } = await supabase.from('attendance')
+          .update({ stage_name_for_event: typed.trim() || null })
+          .eq('id', row.id);
+        if (error) { toast('Could not save stage name: ' + error.message); return; }
+        toast(typed.trim() ? `Stage name set: ${typed.trim()}` : 'Stage name cleared.');
+        await loadRoster();
+      });
+      rightSide.appendChild(stageBtn);
 
       if (currentEvent.event_type === 'slam') {
         const isSignedUp = signedUpIds.has(row.attendee_id);

@@ -184,12 +184,16 @@
       const history = await getPoemHistory(attendeeId);
       const historyForOtherEvents = prior ? history.filter(h => h !== prior.poem_title) : history;
 
+      const { data: attRow } = await supabase.from('attendance')
+        .select('stage_name_for_event').eq('event_id', currentEvent.id).eq('attendee_id', attendeeId).maybeSingle();
+      const stageName = attRow?.stage_name_for_event;
+
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
         <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:1rem; font-weight:600; color:var(--ink); margin:0 0 10px;">
           <input type="checkbox" class="participating" data-attendee="${attendeeId}" ${prior || roundNumber === 1 ? 'checked' : ''} style="width:20px; height:20px;">
-          ${escapeHtml(name)}
+          ${escapeHtml(name)}${stageName ? ` <span class="meta" style="font-weight:500;">— announce as "${escapeHtml(stageName)}" tonight</span>` : ''}
         </label>
         <div class="roundFields" style="display:${prior || roundNumber === 1 ? 'block' : 'none'};">
           <label>Poem title</label>
