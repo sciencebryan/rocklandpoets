@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Event Report</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="reports.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Reports</a>
+  </div>
+
+  <h1 style="font-size:1.3rem; margin-bottom:12px;">Event report</h1>
+  <select id="eventPicker" style="margin-bottom:16px;"><option value="">— Choose an event —</option></select>
+
+  <div id="report"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+  const TYPE_LABEL = { slam: 'Slam', open_mic: 'Open mic', workshop: 'Workshop' };
+
+  const picker = document.getElementById('eventPicker');
+  const { data: events } = await supabase.from('events').select('id, event_date, event_type').order('event_date', { ascending: false });
+  for (const ev of events || []) {
+    const opt = document.createElement('option');
+    opt.value = ev.id;
+    opt.textContent = `${ev.event_date} — ${TYPE_LABEL[ev.event_type] || ev.event_type}`;
+    picker.appendChild(opt);
+  }
+
+  picker.addEventListener('change', () => {
+    if (picker.value) runReport(parseInt(picker.value, 10));
+    else document.getElementById('report').innerHTML = '';
+  });
+
+  async function fetchNames(ids) {
+    if (!ids.length) return {};
+    const { data } = await supabase.from('attendee_display').select('id, display_name').in('id', [...new Set(ids)]);
+    return Object.fromEntries((data || []).map(n => [n.id, n.display_name]));
+  }
+
+  async function runReport(eventId) {
+    const reportEl = document.getElementById('report');
+    reportEl.innerHTML = '<div class="empty-state">Loading…</div>';
+
+    const ev = events.find(e => e.id === eventId);
+
+    const { data: attendanceRows } = await supabase.from('attendance').select('attendee_id').eq('event_id', eventId);
+    const checkedInIds = (attendanceRows || []).map(r => r.attendee_id);
+
+    // Determine who's "new" -- this is their earliest-ever attendance
+    let newIds = [];
+    let referralBreakdown = {};
+    if (checkedInIds.length) {
+      const { data: allTheirAttendanceRaw } = await supabase.from('attendance').select('attendee_id, event_id').in('attendee_id', checkedInIds);
+      const eventIds = [...new Set((allTheirAttendanceRaw || []).map(r => r.event_id))];
+      const { data: eventDates } = await supabase.from('events').select('id, event_date').in('id', eventIds);
+      const dateById = Object.fromEntries((eventDates || []).map(e => [e.id, e.event_date]));
+
+      const firstDateByAttendee = {};
+      for (const row of allTheirAttendanceRaw || []) {
+        const date = dateById[row.event_id];
+        if (!date) continue;
+        if (!firstDateByAttendee[row.attendee_id] || date < firstDateByAttendee[row.attendee_id]) {
+          firstDateByAttendee[row.attendee_id] = date;
+        }
+      }
+      newIds = checkedInIds.filter(id => firstDateByAttendee[id] === ev.event_date);
+
+      if (newIds.length) {
+        const { data: newAttendeeRows } = await supabase.from('attendees').select('id, referral_source_id').in('id', newIds);
+        const { data: sources } = await supabase.from('referral_sources').select('id, label');
+        const labelById = Object.fromEntries((sources || []).map(s => [s.id, s.label]));
+        for (const a of newAttendeeRows || []) {
+          const label = labelById[a.referral_source_id] || 'Unknown';
+          referralBreakdown[label] = (referralBreakdown[label] || 0) + 1;
+        }
+      }
+    }
+
+    let slamSection = '';
+    if (ev.event_type === 'slam') {
+      const { data: placements } = await supabase.from('all_placements').select('attendee_id, placement').eq('event_id', eventId).lte('placement', 4).order('placement');
+      const { data: cutRows } = await supabase.from('slam_signups').select('attendee_id').eq('event_id', eventId).eq('randomized_out', true);
+      const { data: rounds } = await supabase.from('competition_rounds').select('round_number, attendee_id, poem_title, votes').eq('event_id', eventId).order('round_number');
+
+      const allIds = [...(placements || []).map(p => p.attendee_id), ...(cutRows || []).map(c => c.attendee_id), ...(rounds || []).map(r => r.attendee_id)];
+      const names = await fetchNames(allIds);
+
+      const placementLabel = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' };
+      const placementLines = (placements || []).map(p => `<div>${placementLabel[p.placement] || p.placement}: ${escapeHtml(names[p.attendee_id])}</div>`).join('');
+      const cutLines = (cutRows || []).length
+        ? (cutRows.map(c => escapeHtml(names[c.attendee_id])).join(', '))
+        : 'No one';
+
+      const roundsByNumber = {};
+      for (const r of rounds || []) {
+        (roundsByNumber[r.round_number] ||= []).push(r);
+      }
+      const roundsHtml = Object.entries(roundsByNumber).map(([num, rows]) => `
+        <div style="margin-top:8px;">
+          <strong>Round ${num}</strong>
+          ${rows.map(r => `<div class="roster-row"><span class="name">${escapeHtml(names[r.attendee_id])} — ${escapeHtml(r.poem_title)}</span><span class="mono meta">${r.votes ?? '—'}v</span></div>`).join('')}
+        </div>
+      `).join('');
+
+      slamSection = `
+        <h2 style="font-size:1.05rem; margin-top:20px;">Sign-ups closed</h2>
+        <div>${ev.signups_closed_at ? new Date(ev.signups_closed_at).toLocaleTimeString() : 'Not closed yet'}</div>
+        <h2 style="font-size:1.05rem; margin-top:20px;">Placements</h2>
+        ${placementLines || '<div class="meta">No placements recorded</div>'}
+        <h2 style="font-size:1.05rem; margin-top:20px;">Randomized out</h2>
+        <div>${cutLines}</div>
+        <h2 style="font-size:1.05rem; margin-top:20px;">Rounds</h2>
+        ${roundsHtml || '<div class="meta">No round data recorded</div>'}
+      `;
+    }
+
+    reportEl.innerHTML = `
+      <div class="card">
+        <div><strong>${ev.event_date}</strong> — ${TYPE_LABEL[ev.event_type] || ev.event_type}</div>
+        <div>Checked in: ${checkedInIds.length}</div>
+        <div>New people: ${newIds.length}</div>
+        ${newIds.length ? `<div class="meta">${Object.entries(referralBreakdown).map(([label, count]) => `${escapeHtml(label)}: ${count}`).join(' · ')}</div>` : ''}
+      </div>
+      ${slamSection}
+    `;
+  }
+</script>
+</body>
+</html>

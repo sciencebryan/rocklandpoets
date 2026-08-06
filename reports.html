@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Reports</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="checkin.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Check-in</a>
+  </div>
+
+  <h1 style="font-size:1.3rem; margin-bottom:16px;">Reports</h1>
+
+  <a href="report_event.html" class="roster-row" style="text-decoration:none; color:var(--ink);">
+    <span class="name">Event report</span><span class="meta">Attendance, placements, rounds for one night</span>
+  </a>
+  <a href="report_person.html" class="roster-row" style="text-decoration:none; color:var(--ink);">
+    <span class="name">Person report</span><span class="meta">Full history for one attendee</span>
+  </a>
+  <a href="report_stats.html" class="roster-row" style="text-decoration:none; color:var(--ink);">
+    <span class="name">Overview report</span><span class="meta">Aggregate stats over a date range</span>
+  </a>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+</script>
+</body>
+</html>

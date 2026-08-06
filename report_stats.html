@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Overview Report</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="reports.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Reports</a>
+  </div>
+
+  <h1 style="font-size:1.3rem; margin-bottom:12px;">Overview report</h1>
+
+  <label for="startDate">From</label>
+  <input type="date" id="startDate">
+  <label for="endDate">To</label>
+  <input type="date" id="endDate">
+  <button class="btn-primary" id="runBtn" style="margin-top:14px;">Run report</button>
+
+  <div id="report"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  const today = new Date();
+  const twelveMonthsAgo = new Date(today);
+  twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+  const isoDate = (d) => d.toISOString().slice(0, 10);
+
+  document.getElementById('endDate').value = isoDate(today);
+  document.getElementById('startDate').value = isoDate(twelveMonthsAgo);
+
+  document.getElementById('runBtn').addEventListener('click', runReport);
+  runReport(); // run once with the default range on load
+
+  async function runReport() {
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const reportEl = document.getElementById('report');
+    reportEl.innerHTML = '<div class="empty-state">Loading…</div>';
+
+    const { data: eventsInRange } = await supabase.from('events').select('id, event_date, event_type').gte('event_date', start).lte('event_date', end);
+    const eventIds = (eventsInRange || []).map(e => e.id);
+    const slamEventIds = new Set((eventsInRange || []).filter(e => e.event_type === 'slam').map(e => e.id));
+
+    if (eventIds.length === 0) {
+      reportEl.innerHTML = '<div class="empty-state">No events in this date range.</div>';
+      return;
+    }
+
+    const { data: attendanceRows } = await supabase.from('attendance').select('attendee_id, event_id').in('event_id', eventIds);
+    const totalVisits = (attendanceRows || []).length;
+
+    const visitsByAttendee = {};
+    for (const row of attendanceRows || []) {
+      visitsByAttendee[row.attendee_id] = (visitsByAttendee[row.attendee_id] || 0) + 1;
+    }
+    const uniqueVisitors = Object.keys(visitsByAttendee).length;
+
+    const { data: placementRows } = await supabase.from('all_placements').select('attendee_id, event_id').in('event_id', eventIds);
+    const uniqueCompetitors = new Set((placementRows || []).filter(p => slamEventIds.has(p.event_id)).map(p => p.attendee_id)).size;
+
+    const avgEventsPerPerson = uniqueVisitors ? (totalVisits / uniqueVisitors) : 0;
+    const exactlyOne = Object.values(visitsByAttendee).filter(v => v === 1).length;
+
+    const monthsInRange = Math.max((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24 * 30.44), 1);
+    const atLeastMonthlyRate = Object.values(visitsByAttendee).filter(v => (v / monthsInRange) >= 1).length;
+
+    reportEl.innerHTML = `
+      <div class="card">
+        <div>Date range: ${escapeHtml(start)} to ${escapeHtml(end)} (${monthsInRange.toFixed(1)} months)</div>
+      </div>
+      <div class="roster-row"><span class="name">Total visits</span><span class="mono">${totalVisits}</span></div>
+      <div class="roster-row"><span class="name">Unique visitors</span><span class="mono">${uniqueVisitors}</span></div>
+      <div class="roster-row"><span class="name">Unique slam competitors</span><span class="mono">${uniqueCompetitors}</span></div>
+      <div class="roster-row"><span class="name">Average visits per person</span><span class="mono">${avgEventsPerPerson.toFixed(2)}</span></div>
+      <div class="roster-row"><span class="name">Attended exactly one event</span><span class="mono">${exactlyOne}</span></div>
+      <div class="roster-row"><span class="name">Visit rate ≥ once/month on average</span><span class="mono">${atLeastMonthlyRate}</span></div>
+    `;
+  }
+</script>
+</body>
+</html>

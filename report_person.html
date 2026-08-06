@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Person Report</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="reports.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Reports</a>
+  </div>
+
+  <h1 style="font-size:1.3rem; margin-bottom:12px;">Person report</h1>
+  <input type="text" id="search" placeholder="Search by name…" autocomplete="off" style="margin-bottom:12px;">
+  <div id="results"></div>
+  <div id="report"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  const searchEl = document.getElementById('search');
+  const resultsEl = document.getElementById('results');
+  let debounceTimer;
+
+  searchEl.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(runSearch, 250);
+  });
+
+  async function runSearch() {
+    const q = searchEl.value.trim();
+    resultsEl.innerHTML = '';
+    document.getElementById('report').innerHTML = '';
+    if (q.length < 2) return;
+
+    const { data, error } = await supabase.from('attendees')
+      .select('id, first_name, last_name, nickname')
+      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,nickname.ilike.%${q}%`)
+      .limit(20);
+
+    if (error) { resultsEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { resultsEl.innerHTML = '<div class="empty-state">No match found.</div>'; return; }
+
+    for (const a of data) {
+      const label = [a.nickname, [a.first_name, a.last_name].filter(Boolean).join(' ')].filter(Boolean).join(' / ');
+      const row = document.createElement('button');
+      row.className = 'roster-row';
+      row.style.cssText += 'border:1px solid var(--line); border-left:4px solid var(--brass); cursor:pointer; font-family:inherit;';
+      row.innerHTML = `<span class="name">${escapeHtml(label)}</span><span class="meta">Tap to view</span>`;
+      row.addEventListener('click', () => runReport(a.id));
+      resultsEl.appendChild(row);
+    }
+  }
+
+  async function activeSeasonStart() {
+    const { data } = await supabase.from('active_season').select('start_date').maybeSingle();
+    return data?.start_date || null;
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((new Date(b) - new Date(a)) / 86400000);
+  }
+
+  async function runReport(attendeeId) {
+    resultsEl.innerHTML = '';
+    const reportEl = document.getElementById('report');
+    reportEl.innerHTML = '<div class="empty-state">Loading…</div>';
+
+    const { data: a } = await supabase.from('attendees').select('*').eq('id', attendeeId).single();
+    const { data: source } = a.referral_source_id
+      ? await supabase.from('referral_sources').select('label').eq('id', a.referral_source_id).maybeSingle()
+      : { data: null };
+
+    // Visit history
+    const { data: attendanceRows } = await supabase.from('attendance').select('event_id').eq('attendee_id', attendeeId);
+    const eventIds = [...new Set((attendanceRows || []).map(r => r.event_id))];
+    const { data: eventRows } = eventIds.length
+      ? await supabase.from('events').select('id, event_date').in('id', eventIds)
+      : { data: [] };
+    const dates = (eventRows || []).map(e => e.event_date).sort();
+
+    let avgGapText = 'N/A (fewer than 2 visits)';
+    if (dates.length >= 2) {
+      const gaps = [];
+      for (let i = 1; i < dates.length; i++) gaps.push(daysBetween(dates[i - 1], dates[i]));
+      const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      avgGapText = `${avg.toFixed(1)} days`;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Slam record
+    const seasonStart = await activeSeasonStart();
+    const { data: placementRows } = await supabase.from('all_placements').select('event_id, placement').eq('attendee_id', attendeeId);
+    const placementEventIds = [...new Set((placementRows || []).map(p => p.event_id))];
+    const { data: placementEventRows } = placementEventIds.length
+      ? await supabase.from('events').select('id, event_date').in('id', placementEventIds)
+      : { data: [] };
+    const placementDateById = Object.fromEntries((placementEventRows || []).map(e => [e.id, e.event_date]));
+
+    const timesSlammed = placementEventIds.length;
+    const placementCounts = { overall: { 1: 0, 2: 0, 3: 0, 4: 0 }, season: { 1: 0, 2: 0, 3: 0, 4: 0 } };
+    for (const p of placementRows || []) {
+      if (p.placement >= 1 && p.placement <= 4) {
+        placementCounts.overall[p.placement]++;
+        const date = placementDateById[p.event_id];
+        if (seasonStart && date >= seasonStart) placementCounts.season[p.placement]++;
+      }
+    }
+
+    // Randomized-out record
+    const { data: signupRows } = await supabase.from('slam_signups').select('event_id, randomized_out, randomized_out_at').eq('attendee_id', attendeeId);
+    const signupEventIds = [...new Set((signupRows || []).map(s => s.event_id))];
+    const { data: signupEventRows } = signupEventIds.length
+      ? await supabase.from('events').select('id, event_date').in('id', signupEventIds)
+      : { data: [] };
+    const signupDateById = Object.fromEntries((signupEventRows || []).map(e => [e.id, e.event_date]));
+    const orderedSignups = [...(signupRows || [])].sort((x, y) => (signupDateById[x.event_id] || '').localeCompare(signupDateById[y.event_id] || ''));
+
+    const totalSignups = orderedSignups.length;
+    const cutCount = orderedSignups.filter(s => s.randomized_out).length;
+    let longestStreak = 0, currentStreak = 0;
+    for (const s of orderedSignups) {
+      if (s.randomized_out) { currentStreak++; longestStreak = Math.max(longestStreak, currentStreak); }
+      else currentStreak = 0;
+    }
+    const lastCut = orderedSignups.filter(s => s.randomized_out).map(s => signupDateById[s.event_id]).sort().pop();
+
+    reportEl.innerHTML = `
+      <div class="card">
+        <div style="font-weight:600; font-size:1.1rem;">${escapeHtml([a.first_name, a.last_name].filter(Boolean).join(' '))}</div>
+        ${a.nickname ? `<div class="meta">Stage name: ${escapeHtml(a.nickname)}</div>` : ''}
+        <div class="meta">${escapeHtml(a.email || 'no email')} · ${escapeHtml(a.phone || 'no phone')}</div>
+        <div class="meta">Heard about us via: ${escapeHtml(source?.label || 'Unknown')}</div>
+      </div>
+
+      <h2 style="font-size:1.05rem; margin-top:20px;">Visits</h2>
+      <div>First visit: ${escapeHtml(dates[0] || 'N/A')}</div>
+      <div>Most recent visit: ${escapeHtml(dates[dates.length - 1] || 'N/A')}</div>
+      <div>Days since most recent visit: ${dates.length ? daysBetween(dates[dates.length - 1], today) : 'N/A'}</div>
+      <div>Total visits: ${dates.length}</div>
+      <div>Average time between visits: ${avgGapText}</div>
+
+      <h2 style="font-size:1.05rem; margin-top:20px;">Slam record</h2>
+      <div>Times slammed: ${timesSlammed}</div>
+      <div class="mono" style="margin-top:6px;">
+        <div>1st place — season: ${placementCounts.season[1]}, overall: ${placementCounts.overall[1]}</div>
+        <div>2nd place — season: ${placementCounts.season[2]}, overall: ${placementCounts.overall[2]}</div>
+        <div>3rd place — season: ${placementCounts.season[3]}, overall: ${placementCounts.overall[3]}</div>
+        <div>4th place — season: ${placementCounts.season[4]}, overall: ${placementCounts.overall[4]}</div>
+      </div>
+
+      <h2 style="font-size:1.05rem; margin-top:20px;">Randomized out</h2>
+      <div>${totalSignups ? `${cutCount} of ${totalSignups} sign-ups (${((cutCount / totalSignups) * 100).toFixed(0)}%)` : 'Never signed up to compete'}</div>
+      ${totalSignups ? `<div>Longest streak: ${longestStreak}</div><div>Most recent: ${escapeHtml(lastCut || 'Never')}</div>` : ''}
+    `;
+  }
+</script>
+</body>
+</html>
