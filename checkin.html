@@ -142,6 +142,16 @@
         roundEntryLink.after(editLink);
       }
     }
+    if (myRole === 'admin') {
+      const roundEntryLink = document.querySelector('a[href="rounds.html"]');
+      if (roundEntryLink) {
+        const adminLink = document.createElement('a');
+        adminLink.href = 'admin.html';
+        adminLink.textContent = 'Admin';
+        adminLink.style.cssText = 'font-size:0.8rem; color:var(--wine); text-decoration:none; margin-left:8px;';
+        roundEntryLink.after(adminLink);
+      }
+    }
   }
 
   // ---- Toast helper ----
