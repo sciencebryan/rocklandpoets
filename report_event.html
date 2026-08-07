@@ -58,9 +58,16 @@
     reportEl.innerHTML = '<div class="empty-state">Loading…</div>';
 
     const ev = events.find(e => e.id === eventId);
+    const personLink = (id, text) => `<a href="report_person.html?id=${id}" style="color:var(--wine); text-decoration:underline;">${escapeHtml(text)}</a>`;
 
     const { data: attendanceRows } = await supabase.from('attendance').select('attendee_id').eq('event_id', eventId);
     const checkedInIds = (attendanceRows || []).map(r => r.attendee_id);
+
+    const attendeeNames = await fetchNames(checkedInIds);
+    const attendeeListHtml = checkedInIds.length
+      ? [...checkedInIds].sort((a, b) => (attendeeNames[a] || '').localeCompare(attendeeNames[b] || ''))
+          .map(id => `<div class="roster-row"><span class="name">${personLink(id, attendeeNames[id])}</span></div>`).join('')
+      : '<div class="empty-state">No one checked in.</div>';
 
     // Determine who's "new" -- this is their earliest-ever attendance
     let newIds = [];
@@ -102,7 +109,6 @@
       const names = await fetchNames(allIds);
 
       const placementLabel = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' };
-      const personLink = (id, text) => `<a href="report_person.html?id=${id}" style="color:var(--wine); text-decoration:underline;">${escapeHtml(text)}</a>`;
       const placementLines = (placements || []).map(p => `<div>${placementLabel[p.placement] || p.placement}: ${personLink(p.attendee_id, names[p.attendee_id])}</div>`).join('');
       const cutLines = (cutRows || []).length
         ? (cutRows.map(c => personLink(c.attendee_id, names[c.attendee_id])).join(', '))
@@ -138,6 +144,8 @@
         <div>New people: ${newIds.length}</div>
         ${newIds.length ? `<div class="meta">${Object.entries(referralBreakdown).map(([label, count]) => `${escapeHtml(label)}: ${count}`).join(' · ')}</div>` : ''}
       </div>
+      <h2 style="font-size:1.05rem; margin-top:20px;">Who was there</h2>
+      ${attendeeListHtml}
       ${slamSection}
     `;
   }
