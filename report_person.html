@@ -171,8 +171,95 @@
       <h2 style="font-size:1.05rem; margin-top:20px;">Randomized out</h2>
       <div>${totalSignups ? `${cutCount} of ${totalSignups} sign-ups (${((cutCount / totalSignups) * 100).toFixed(0)}%)` : 'Never signed up to compete'}</div>
       ${totalSignups ? `<div>Longest streak: ${longestStreak}</div><div>Most recent: ${escapeHtml(lastCut || 'Never')}</div>` : ''}
+
+      <h2 style="font-size:1.05rem; margin-top:20px;">Poems</h2>
+      <div id="poemsSortControls" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <button class="poem-sort-btn btn-primary" data-sort="date" style="width:auto; padding:8px 14px; font-size:0.85rem;">By date</button>
+        <button class="poem-sort-btn btn-secondary" data-sort="title" style="width:auto; padding:8px 14px; font-size:0.85rem;">By title</button>
+        <button class="poem-sort-btn btn-secondary" data-sort="percent" style="width:auto; padding:8px 14px; font-size:0.85rem;">By % of top score</button>
+      </div>
+      <div id="poemsList"></div>
     `;
+
+    await renderPoems(attendeeId);
   }
+
+  let poemRows = [];
+  let poemSort = 'date';
+
+  async function renderPoems(attendeeId) {
+    const { data: mine } = await supabase.from('competition_rounds')
+      .select('event_id, round_number, poem_title, votes').eq('attendee_id', attendeeId);
+
+    if (!mine || mine.length === 0) {
+      document.getElementById('poemsSortControls').style.display = 'none';
+      document.getElementById('poemsList').innerHTML = '<div class="empty-state">No poems on record.</div>';
+      return;
+    }
+
+    const eventIds = [...new Set(mine.map(r => r.event_id))];
+    const { data: eventRows } = await supabase.from('events').select('id, event_date').in('id', eventIds);
+    const dateById = Object.fromEntries((eventRows || []).map(e => [e.id, e.event_date]));
+
+    // Need every competitor's votes for the same rounds, to find the top score in each
+    const { data: allInThoseEvents } = await supabase.from('competition_rounds')
+      .select('event_id, round_number, votes').in('event_id', eventIds);
+
+    const maxByRound = {};
+    for (const r of allInThoseEvents || []) {
+      if (r.votes == null) continue;
+      const key = `${r.event_id}-${r.round_number}`;
+      if (!(key in maxByRound) || r.votes > maxByRound[key]) maxByRound[key] = r.votes;
+    }
+
+    poemRows = mine.map(r => {
+      const key = `${r.event_id}-${r.round_number}`;
+      const topVotes = maxByRound[key];
+      const percent = (r.votes != null && topVotes) ? Math.round((r.votes / topVotes) * 100) : null;
+      return {
+        date: dateById[r.event_id] || '',
+        title: r.poem_title,
+        round: r.round_number,
+        votes: r.votes,
+        percent,
+      };
+    });
+
+    document.getElementById('poemsSortControls').style.display = 'flex';
+    sortAndRenderPoems();
+  }
+
+  function sortAndRenderPoems() {
+    const sorted = [...poemRows];
+    if (poemSort === 'date') sorted.sort((a, b) => b.date.localeCompare(a.date));
+    else if (poemSort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title));
+    else if (poemSort === 'percent') sorted.sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1));
+
+    const listEl = document.getElementById('poemsList');
+    listEl.innerHTML = '';
+    for (const p of sorted) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `
+        <span class="name">${escapeHtml(p.title)} <span class="meta">(Round ${p.round}, ${escapeHtml(p.date)})</span></span>
+        <span class="mono">${p.votes ?? '—'}v${p.percent != null ? ` · ${p.percent}%` : ''}</span>
+      `;
+      listEl.appendChild(row);
+    }
+  }
+
+  document.querySelectorAll('.poem-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      poemSort = btn.dataset.sort;
+      document.querySelectorAll('.poem-sort-btn').forEach(b => {
+        b.className = 'poem-sort-btn btn-secondary';
+        b.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
+      });
+      btn.className = 'poem-sort-btn btn-primary';
+      btn.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
+      sortAndRenderPoems();
+    });
+  });
 </script>
 </body>
 </html>
