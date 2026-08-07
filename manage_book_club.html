@@ -166,15 +166,22 @@
     loadList();
   });
 
+  function pageSortKey(pageNumber) {
+    const match = (pageNumber || '').match(/\d+/);
+    return match ? parseInt(match[0], 10) : Infinity;
+  }
+
   async function loadFocusPoems() {
     if (!editingId) return;
-    const { data, error } = await supabase.from('book_club_focus_poems').select('*').eq('selection_id', editingId).order('sort_order', { ascending: true });
+    const { data, error } = await supabase.from('book_club_focus_poems').select('*').eq('selection_id', editingId);
     const listEl = document.getElementById('focusPoemsList');
     if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
     if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No focus poems added yet.</div>'; return; }
 
+    const sorted = [...data].sort((a, b) => pageSortKey(a.page_number) - pageSortKey(b.page_number));
+
     listEl.innerHTML = '';
-    for (const p of data) {
+    for (const p of sorted) {
       const row = document.createElement('div');
       row.className = 'roster-row';
       row.innerHTML = `<span class="name">${escapeHtml(p.poem_title)}${p.page_number ? ` <span class="meta">(p. ${escapeHtml(p.page_number)})</span>` : ''}</span>`;

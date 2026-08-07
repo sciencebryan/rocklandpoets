@@ -33,17 +33,23 @@
     return div.innerHTML;
   }
 
+  function pageSortKey(pageNumber) {
+    const match = (pageNumber || '').match(/\d+/);
+    return match ? parseInt(match[0], 10) : Infinity;
+  }
+
   function bookCard(b, isCurrent, focusPoems) {
     const div = document.createElement('div');
     div.className = 'card';
     if (isCurrent) div.style.borderLeft = '4px solid var(--brass)';
-    const poemsHtml = (focusPoems && focusPoems.length)
+    const sortedPoems = focusPoems ? [...focusPoems].sort((a, b) => pageSortKey(a.page_number) - pageSortKey(b.page_number)) : focusPoems;
+    const poemsHtml = (sortedPoems && sortedPoems.length)
       ? `<div style="margin-top:10px;">
           <div class="meta" style="font-weight:600; margin-bottom:4px;">Focus poems (for those short on time):</div>
-          ${focusPoems.map(p => `
+          ${sortedPoems.map(p => `
             <div style="margin-bottom:4px;">
               ${escapeHtml(p.poem_title)}${p.page_number ? ` <span class="meta">(p. ${escapeHtml(p.page_number)})</span>` : ''}
-              ${p.link_url ? ` — <a href="${escapeHtml(p.link_url)}" target="_blank" style="color:var(--wine);">free copy</a>` : ''}
+              ${p.link_url ? ` — <a href="${escapeHtml(p.link_url)}" target="_blank" style="color:var(--wine);">online copy</a>` : ''}
             </div>
           `).join('')}
         </div>`
@@ -68,7 +74,7 @@
     if (!data || data.length === 0) { currentEl.innerHTML = '<div class="empty-state">No book selected yet.</div>'; return; }
 
     const selectionIds = data.map(b => b.id);
-    const { data: focusPoemRows } = await supabase.from('book_club_focus_poems').select('*').in('selection_id', selectionIds).order('sort_order', { ascending: true });
+    const { data: focusPoemRows } = await supabase.from('book_club_focus_poems').select('*').in('selection_id', selectionIds);
     const focusPoemsBySelection = {};
     for (const p of focusPoemRows || []) {
       (focusPoemsBySelection[p.selection_id] ||= []).push(p);
