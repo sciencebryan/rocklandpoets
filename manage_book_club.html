@@ -36,6 +36,7 @@
       <div id="formError" class="error-box" style="display:none;"></div>
 
       <button class="btn-primary" id="saveBtn" style="margin-top:16px;">Save</button>
+      <button class="btn-secondary" id="addAnotherBtn" style="margin-top:8px;">+ Add another book</button>
       <button class="btn-ghost" id="cancelBtn" style="display:none;">Cancel edit</button>
     </div>
 
@@ -48,7 +49,7 @@
       <input type="text" id="fpTitle">
       <label for="fpPage">Page number</label>
       <input type="text" id="fpPage" placeholder="e.g. 42 or xii or 12-14">
-      <label for="fpLink">Link to a free copy (optional)</label>
+      <label for="fpLink">Link to an online copy (optional)</label>
       <input type="text" id="fpLink">
       <button class="btn-secondary" id="addFocusPoemBtn" style="margin-top:12px;">Add focus poem</button>
     </div>
@@ -120,6 +121,7 @@
   }
 
   document.getElementById('cancelBtn').addEventListener('click', resetForm);
+  document.getElementById('addAnotherBtn').addEventListener('click', resetForm);
 
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const errEl = document.getElementById('formError');
