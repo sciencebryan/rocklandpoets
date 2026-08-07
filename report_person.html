@@ -226,6 +226,18 @@
     });
 
     document.getElementById('poemsSortControls').style.display = 'flex';
+    document.querySelectorAll('.poem-sort-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        poemSort = btn.dataset.sort;
+        document.querySelectorAll('.poem-sort-btn').forEach(b => {
+          b.className = 'poem-sort-btn btn-secondary';
+          b.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
+        });
+        btn.className = 'poem-sort-btn btn-primary';
+        btn.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
+        sortAndRenderPoems();
+      });
+    });
     sortAndRenderPoems();
   }
 
@@ -247,19 +259,6 @@
       listEl.appendChild(row);
     }
   }
-
-  document.querySelectorAll('.poem-sort-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      poemSort = btn.dataset.sort;
-      document.querySelectorAll('.poem-sort-btn').forEach(b => {
-        b.className = 'poem-sort-btn btn-secondary';
-        b.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
-      });
-      btn.className = 'poem-sort-btn btn-primary';
-      btn.style.cssText = 'width:auto; padding:8px 14px; font-size:0.85rem;';
-      sortAndRenderPoems();
-    });
-  });
 </script>
 </body>
 </html>
