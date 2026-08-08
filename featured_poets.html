@@ -45,12 +45,26 @@
   }
 
   function poetRow(p) {
+    const videoId = extractYouTubeId(p.youtube_url);
+    const hasExtra = !!(p.bio || p.website_url || p.youtube_url);
+
     const div = document.createElement('div');
     div.className = 'card';
-    const videoId = extractYouTubeId(p.youtube_url);
-    div.innerHTML = `
-      <div class="mono meta">${escapeHtml(p.feature_date)}</div>
-      <div style="font-weight:600; font-size:1.1rem; margin-top:4px;">${escapeHtml(p.poet_name)}</div>
+    if (hasExtra) div.style.cursor = 'pointer';
+
+    const summary = document.createElement('div');
+    summary.style.cssText = 'display:flex; justify-content:space-between; align-items:center;';
+    summary.innerHTML = `
+      <div>
+        <div class="mono meta">${escapeHtml(p.feature_date)}</div>
+        <div style="font-weight:600; font-size:1.1rem; margin-top:2px;">${escapeHtml(p.poet_name)}</div>
+      </div>
+      ${hasExtra ? '<span class="arrow" style="font-size:1.1rem; color:var(--wine);">▾</span>' : ''}
+    `;
+
+    const details = document.createElement('div');
+    details.style.display = 'none';
+    details.innerHTML = `
       ${p.bio ? `<div style="margin-top:8px;">${escapeHtml(p.bio)}</div>` : ''}
       ${p.website_url ? `<div style="margin-top:8px;"><a href="${escapeHtml(p.website_url)}" target="_blank" style="color:var(--wine);">Website →</a></div>` : ''}
       ${videoId
@@ -62,6 +76,18 @@
         : (p.youtube_url ? `<div style="margin-top:8px;"><a href="${escapeHtml(p.youtube_url)}" target="_blank" style="color:var(--wine);">Watch on YouTube →</a></div>` : '')
       }
     `;
+
+    if (hasExtra) {
+      div.addEventListener('click', () => {
+        const expanded = details.style.display !== 'none';
+        details.style.display = expanded ? 'none' : 'block';
+        const arrow = summary.querySelector('.arrow');
+        if (arrow) arrow.textContent = expanded ? '▾' : '▴';
+      });
+    }
+
+    div.appendChild(summary);
+    div.appendChild(details);
     return div;
   }
 

@@ -26,6 +26,14 @@
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) window.location.href = 'login.html';
 
+  {
+    const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
+    if (roleRow?.role === 'book_club_lead') {
+      document.body.innerHTML = '<div class="page"><div class="error-box">This account is scoped to book club management only. <a href="manage_book_club.html" style="color:var(--wine);">Go to Manage Book Club</a></div></div>';
+      throw new Error('access restricted to book_club_lead scope');
+    }
+  }
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str == null ? '' : String(str);
@@ -34,7 +42,7 @@
   const TYPE_LABEL = { slam: 'Slam', open_mic: 'Open mic', workshop: 'Workshop' };
 
   const picker = document.getElementById('eventPicker');
-  const { data: events } = await supabase.from('events').select('id, event_date, event_type').order('event_date', { ascending: false });
+  const { data: events } = await supabase.from('events').select('id, event_date, event_type, venue_id').order('event_date', { ascending: false });
   for (const ev of events || []) {
     const opt = document.createElement('option');
     opt.value = ev.id;
@@ -58,15 +66,21 @@
     reportEl.innerHTML = '<div class="empty-state">Loading…</div>';
 
     const ev = events.find(e => e.id === eventId);
+    let venueLabel = '';
+    if (ev.venue_id) {
+      const { data: v } = await supabase.from('venues').select('name, city, state').eq('id', ev.venue_id).maybeSingle();
+      if (v) venueLabel = ` — ${[v.name, v.city, v.state].filter(Boolean).join(', ')}`;
+    }
     const personLink = (id, text) => `<a href="report_person.html?id=${id}" style="color:var(--wine); text-decoration:underline;">${escapeHtml(text)}</a>`;
 
     const { data: attendanceRows } = await supabase.from('attendance').select('attendee_id').eq('event_id', eventId);
     const checkedInIds = (attendanceRows || []).map(r => r.attendee_id);
 
     const attendeeNames = await fetchNames(checkedInIds);
+    const newIdsSet = new Set(newIds);
     const attendeeListHtml = checkedInIds.length
       ? [...checkedInIds].sort((a, b) => (attendeeNames[a] || '').localeCompare(attendeeNames[b] || ''))
-          .map(id => `<div class="roster-row"><span class="name">${personLink(id, attendeeNames[id])}</span></div>`).join('')
+          .map(id => `<div class="roster-row"><span class="name">${personLink(id, attendeeNames[id])}${newIdsSet.has(id) ? ' <span title="First event" style="color:var(--brass);">*</span>' : ''}</span></div>`).join('')
       : '<div class="empty-state">No one checked in.</div>';
 
     // Determine who's "new" -- this is their earliest-ever attendance
@@ -139,12 +153,12 @@
 
     reportEl.innerHTML = `
       <div class="card">
-        <div><strong>${ev.event_date}</strong> — ${TYPE_LABEL[ev.event_type] || ev.event_type}</div>
+        <div><strong>${ev.event_date}</strong> — ${TYPE_LABEL[ev.event_type] || ev.event_type}${venueLabel}</div>
         <div>Checked in: ${checkedInIds.length}</div>
         <div>New people: ${newIds.length}</div>
         ${newIds.length ? `<div class="meta">${Object.entries(referralBreakdown).map(([label, count]) => `${escapeHtml(label)}: ${count}`).join(' · ')}</div>` : ''}
       </div>
-      <h2 style="font-size:1.05rem; margin-top:20px;">Who was there</h2>
+      <h2 style="font-size:1.05rem; margin-top:20px;">Who was there <span class="meta" style="font-weight:400;">(* = first event)</span></h2>
       ${attendeeListHtml}
       ${slamSection}
     `;
