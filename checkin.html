@@ -27,6 +27,19 @@
       <option value="open_mic">Open mic</option>
       <option value="workshop">Workshop</option>
     </select>
+    <label for="venuePicker">Venue</label>
+    <select id="venuePicker">
+      <option value="">— No venue set —</option>
+      <option value="__new__">+ Add a new venue…</option>
+    </select>
+    <div id="newVenueFields" style="display:none; margin-top:8px;">
+      <label for="newVenueName">Venue name</label>
+      <input type="text" id="newVenueName">
+      <label for="newVenueCity">City</label>
+      <input type="text" id="newVenueCity">
+      <label for="newVenueState">State</label>
+      <input type="text" id="newVenueState" placeholder="e.g. NY">
+    </div>
     <button class="btn-primary" id="setEventBtn" style="margin-top:14px;">Start / find this event</button>
   </div>
 
@@ -129,6 +142,10 @@
   {
     const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
     myRole = roleRow?.role || null;
+    if (myRole === 'book_club_lead') {
+      document.body.innerHTML = '<div class="page"><div class="error-box">This account is scoped to book club management only. <a href="manage_book_club.html" style="color:var(--wine);">Go to Manage Book Club</a></div></div>';
+      throw new Error('access restricted to book_club_lead scope');
+    }
     if (myRole === 'checkin_staff') {
       const roundEntryLink = document.querySelector('a[href="rounds.html"]');
       if (roundEntryLink) roundEntryLink.style.display = 'none';
@@ -141,6 +158,11 @@
         bookClubLink.textContent = 'Book club';
         bookClubLink.style.cssText = 'font-size:0.8rem; color:var(--wine); text-decoration:none; margin-left:8px;';
         roundEntryLink.after(bookClubLink);
+        const featuredLink = document.createElement('a');
+        featuredLink.href = 'manage_featured_poets.html';
+        featuredLink.textContent = 'Featured poets';
+        featuredLink.style.cssText = 'font-size:0.8rem; color:var(--wine); text-decoration:none; margin-left:8px;';
+        bookClubLink.after(featuredLink);
       }
     }
     if (myRole === 'organizer' || myRole === 'admin') {
@@ -181,12 +203,44 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  async function findOrCreateEvent(dateStr, eventType) {
-    let { data: existing, error } = await supabase.from('events').select('id, event_date, event_type, signups_closed_at').eq('event_date', dateStr).maybeSingle();
+  async function loadVenues() {
+    const { data } = await supabase.from('venues').select('id, name, city, state').order('name');
+    const picker = document.getElementById('venuePicker');
+    for (const v of data || []) {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = [v.name, v.city, v.state].filter(Boolean).join(', ');
+      picker.insertBefore(opt, picker.querySelector('option[value="__new__"]'));
+    }
+  }
+  loadVenues();
+
+  document.getElementById('venuePicker').addEventListener('change', (e) => {
+    document.getElementById('newVenueFields').style.display = e.target.value === '__new__' ? 'block' : 'none';
+  });
+
+  async function resolveVenueId() {
+    const picked = document.getElementById('venuePicker').value;
+    if (!picked) return null;
+    if (picked !== '__new__') return parseInt(picked, 10);
+
+    const name = document.getElementById('newVenueName').value.trim();
+    if (!name) { toast('Venue name is required to add a new venue.'); return undefined; }
+    const { data, error } = await supabase.from('venues').insert({
+      name,
+      city: document.getElementById('newVenueCity').value.trim() || null,
+      state: document.getElementById('newVenueState').value.trim() || null,
+    }).select().single();
+    if (error) { toast('Could not add venue: ' + error.message); return undefined; }
+    return data.id;
+  }
+
+  async function findOrCreateEvent(dateStr, eventType, venueId) {
+    let { data: existing, error } = await supabase.from('events').select('id, event_date, event_type, signups_closed_at, venue_id').eq('event_date', dateStr).maybeSingle();
     if (error) { toast('Error loading event: ' + error.message); return null; }
     if (existing) return existing;
 
-    const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr, event_type: eventType }).select().single();
+    const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr, event_type: eventType, venue_id: venueId || null }).select().single();
     if (createError) {
       if (createError.code === '42501' || createError.message?.includes('policy')) {
         toast("This event hasn't been started yet — ask an event lead to create it first.");
@@ -198,15 +252,20 @@
     return created;
   }
 
-  async function setEvent(dateStr, eventType) {
-    const ev = await findOrCreateEvent(dateStr, eventType);
+  async function setEvent(dateStr, eventType, venueId) {
+    const ev = await findOrCreateEvent(dateStr, eventType, venueId);
     if (!ev) return;
     currentEvent = ev;
     sessionStorage.setItem('rp_event_date', ev.event_date);
     sessionStorage.setItem('rp_event_type', ev.event_type);
+    let venueLabel = '';
+    if (ev.venue_id) {
+      const { data: v } = await supabase.from('venues').select('name, city, state').eq('id', ev.venue_id).maybeSingle();
+      if (v) venueLabel = ` · ${v.name}`;
+    }
     const typeLabel = ev.event_type === 'slam' ? 'Slam' : ev.event_type === 'workshop' ? 'Workshop' : 'Open mic';
     document.getElementById('eventLabel').innerHTML =
-      `${ev.event_date} · ${typeLabel} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
+      `${ev.event_date} · ${typeLabel}${venueLabel} <a href="#" id="changeEventLink" style="color:var(--wine); font-size:0.75rem;">(change)</a>`;
     if (myRole === 'admin') {
       document.getElementById('eventLabel').innerHTML +=
         ` <a href="#" id="deleteEventLink" style="color:var(--rust); font-size:0.75rem;">(delete)</a>`;
@@ -227,10 +286,13 @@
   }
 
   document.getElementById('eventDate').value = todayISO();
-  document.getElementById('setEventBtn').addEventListener('click', () => {
+  document.getElementById('setEventBtn').addEventListener('click', async () => {
     const dateStr = document.getElementById('eventDate').value;
     const eventType = document.getElementById('eventType').value;
-    if (dateStr) setEvent(dateStr, eventType);
+    if (!dateStr) return;
+    const venueId = await resolveVenueId();
+    if (venueId === undefined) return; // resolveVenueId already showed an error
+    setEvent(dateStr, eventType, venueId);
   });
 
   // Resume the previously selected event if there is one, otherwise show the picker

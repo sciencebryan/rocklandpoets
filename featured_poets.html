@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Featured Poets</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="leaderboard.html" style="font-size:0.85rem; color:var(--wine); text-decoration:none;">Leaderboard</a>
+  </div>
+
+  <h1 style="font-size:1.4rem; margin-bottom:16px;">Featured Poets</h1>
+
+  <div id="upcoming"></div>
+  <div id="divider" style="display:none; text-align:center; color:var(--ink-soft); margin:24px 0; font-size:0.85rem; border-top:1px solid var(--line); padding-top:16px;">Past featured poets</div>
+  <div id="past"></div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function poetRow(p) {
+    const div = document.createElement('div');
+    div.className = 'roster-row';
+    div.innerHTML = `<span class="name">${escapeHtml(p.poet_name)}</span><span class="meta mono">${escapeHtml(p.feature_date)}</span>`;
+    return div;
+  }
+
+  async function load() {
+    const { data, error } = await supabase.from('featured_poets').select('*').order('feature_date', { ascending: true });
+    const upcomingEl = document.getElementById('upcoming');
+    const pastEl = document.getElementById('past');
+
+    if (error) { upcomingEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { upcomingEl.innerHTML = '<div class="empty-state">No featured poets scheduled yet.</div>'; return; }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = data.filter(p => p.feature_date >= today); // already ascending -- soonest first
+    const past = data.filter(p => p.feature_date < today).reverse(); // most recent past first, going further back
+
+    if (upcoming.length === 0) {
+      upcomingEl.innerHTML = '<div class="empty-state">No upcoming featured poets scheduled yet.</div>';
+    } else {
+      for (const p of upcoming) upcomingEl.appendChild(poetRow(p));
+    }
+
+    if (past.length > 0) {
+      document.getElementById('divider').style.display = 'block';
+      for (const p of past) pastEl.appendChild(poetRow(p));
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

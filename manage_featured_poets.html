@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets — Manage Featured Poets</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="featured_poets.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">View public page</a>
+  </div>
+
+  <div id="deniedNotice" style="display:none;" class="error-box">
+    This page is for event leads and above.
+  </div>
+
+  <div id="mainArea" style="display:none;">
+    <h1 style="font-size:1.3rem; margin-bottom:16px;">Manage featured poets</h1>
+
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:4px;" id="formTitle">Add a featured poet</div>
+      <label for="featureDate">Date</label>
+      <input type="date" id="featureDate">
+      <label for="poetName">Poet name</label>
+      <input type="text" id="poetName">
+
+      <div id="formError" class="error-box" style="display:none;"></div>
+
+      <button class="btn-primary" id="saveBtn" style="margin-top:16px;">Save</button>
+      <button class="btn-ghost" id="cancelBtn" style="display:none;">Cancel edit</button>
+    </div>
+
+    <h2 style="font-size:1.1rem; margin-top:28px; margin-bottom:10px;">All featured poets</h2>
+    <div id="list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
+  const allowed = ['event_lead', 'organizer', 'admin'].includes(roleRow?.role);
+
+  if (!allowed) {
+    document.getElementById('deniedNotice').style.display = 'block';
+  } else {
+    document.getElementById('mainArea').style.display = 'block';
+  }
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  let editingId = null;
+
+  function resetForm() {
+    editingId = null;
+    document.getElementById('formTitle').textContent = 'Add a featured poet';
+    document.getElementById('featureDate').value = '';
+    document.getElementById('poetName').value = '';
+    document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('formError').style.display = 'none';
+  }
+
+  document.getElementById('cancelBtn').addEventListener('click', resetForm);
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('formError');
+    errEl.style.display = 'none';
+
+    const name = document.getElementById('poetName').value.trim();
+    const date = document.getElementById('featureDate').value;
+    if (!name) { errEl.textContent = 'Poet name is required.'; errEl.style.display = 'block'; return; }
+    if (!date) { errEl.textContent = 'Date is required.'; errEl.style.display = 'block'; return; }
+
+    const payload = { feature_date: date, poet_name: name };
+
+    let error;
+    if (editingId) {
+      ({ error } = await supabase.from('featured_poets').update(payload).eq('id', editingId));
+    } else {
+      payload.created_by = session.user.id;
+      ({ error } = await supabase.from('featured_poets').insert(payload));
+    }
+
+    if (error) {
+      errEl.textContent = error.code === '23505'
+        ? "There's already a featured poet on that date -- edit the existing one instead, or pick a different date."
+        : 'Save failed: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    toast('Saved.');
+    resetForm();
+    loadList();
+  });
+
+  async function loadList() {
+    const { data, error } = await supabase.from('featured_poets').select('*').order('feature_date', { ascending: false });
+    const listEl = document.getElementById('list');
+    if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No featured poets yet.</div>'; return; }
+
+    listEl.innerHTML = '';
+    for (const p of data) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `<span class="name">${escapeHtml(p.poet_name)} <span class="meta">(${escapeHtml(p.feature_date)})</span></span>`;
+
+      const controls = document.createElement('span');
+      controls.style.cssText = 'display:flex; gap:8px;';
+
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'btn-ghost';
+      editBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem;';
+      editBtn.addEventListener('click', () => {
+        editingId = p.id;
+        document.getElementById('formTitle').textContent = `Editing: ${p.poet_name}`;
+        document.getElementById('featureDate').value = p.feature_date;
+        document.getElementById('poetName').value = p.poet_name;
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        window.scrollTo(0, 0);
+      });
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'btn-ghost';
+      deleteBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`Delete featured poet entry for ${p.poet_name}?`)) return;
+        const { error } = await supabase.from('featured_poets').delete().eq('id', p.id);
+        if (error) { toast('Delete failed: ' + error.message); return; }
+        toast('Deleted.');
+        loadList();
+      });
+
+      controls.appendChild(editBtn);
+      controls.appendChild(deleteBtn);
+      row.appendChild(controls);
+      listEl.appendChild(row);
+    }
+  }
+
+  if (allowed) loadList();
+</script>
+</body>
+</html>
