@@ -26,6 +26,12 @@
       <input type="date" id="featureDate">
       <label for="poetName">Poet name</label>
       <input type="text" id="poetName">
+      <label for="poetBio">Bio (optional)</label>
+      <textarea id="poetBio" rows="4" style="width:100%; font-family:inherit; font-size:1.05rem; padding:14px 16px; border-radius:var(--radius); border:1.5px solid var(--line); background:var(--paper-raised); color:var(--ink);"></textarea>
+      <label for="websiteUrl">Website (optional)</label>
+      <input type="text" id="websiteUrl">
+      <label for="youtubeUrl">YouTube video of their work (optional)</label>
+      <input type="text" id="youtubeUrl" placeholder="paste any YouTube link -- watch, youtu.be, or embed">
 
       <div id="formError" class="error-box" style="display:none;"></div>
 
@@ -77,6 +83,9 @@
     document.getElementById('formTitle').textContent = 'Add a featured poet';
     document.getElementById('featureDate').value = '';
     document.getElementById('poetName').value = '';
+    document.getElementById('poetBio').value = '';
+    document.getElementById('websiteUrl').value = '';
+    document.getElementById('youtubeUrl').value = '';
     document.getElementById('cancelBtn').style.display = 'none';
     document.getElementById('formError').style.display = 'none';
   }
@@ -92,7 +101,13 @@
     if (!name) { errEl.textContent = 'Poet name is required.'; errEl.style.display = 'block'; return; }
     if (!date) { errEl.textContent = 'Date is required.'; errEl.style.display = 'block'; return; }
 
-    const payload = { feature_date: date, poet_name: name };
+    const payload = {
+      feature_date: date,
+      poet_name: name,
+      bio: document.getElementById('poetBio').value.trim() || null,
+      website_url: document.getElementById('websiteUrl').value.trim() || null,
+      youtube_url: document.getElementById('youtubeUrl').value.trim() || null,
+    };
 
     let error;
     if (editingId) {
@@ -139,6 +154,9 @@
         document.getElementById('formTitle').textContent = `Editing: ${p.poet_name}`;
         document.getElementById('featureDate').value = p.feature_date;
         document.getElementById('poetName').value = p.poet_name;
+        document.getElementById('poetBio').value = p.bio || '';
+        document.getElementById('websiteUrl').value = p.website_url || '';
+        document.getElementById('youtubeUrl').value = p.youtube_url || '';
         document.getElementById('cancelBtn').style.display = 'inline-block';
         window.scrollTo(0, 0);
       });

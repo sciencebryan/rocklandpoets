@@ -31,10 +31,37 @@
     return div.innerHTML;
   }
 
+  function extractYouTubeId(url) {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('youtu.be')) return u.pathname.slice(1) || null;
+      if (u.hostname.includes('youtube.com')) {
+        if (u.pathname === '/watch') return u.searchParams.get('v');
+        if (u.pathname.startsWith('/embed/')) return u.pathname.split('/embed/')[1] || null;
+      }
+    } catch (e) { /* not a valid URL at all */ }
+    return null;
+  }
+
   function poetRow(p) {
     const div = document.createElement('div');
-    div.className = 'roster-row';
-    div.innerHTML = `<span class="name">${escapeHtml(p.poet_name)}</span><span class="meta mono">${escapeHtml(p.feature_date)}</span>`;
+    div.className = 'card';
+    const videoId = extractYouTubeId(p.youtube_url);
+    div.innerHTML = `
+      <div class="mono meta">${escapeHtml(p.feature_date)}</div>
+      <div style="font-weight:600; font-size:1.1rem; margin-top:4px;">${escapeHtml(p.poet_name)}</div>
+      ${p.bio ? `<div style="margin-top:8px;">${escapeHtml(p.bio)}</div>` : ''}
+      ${p.website_url ? `<div style="margin-top:8px;"><a href="${escapeHtml(p.website_url)}" target="_blank" style="color:var(--wine);">Website →</a></div>` : ''}
+      ${videoId
+        ? `<div style="margin-top:12px; position:relative; padding-top:56.25%;">
+             <iframe src="https://www.youtube.com/embed/${escapeHtml(videoId)}" title="${escapeHtml(p.poet_name)}"
+               style="position:absolute; top:0; left:0; width:100%; height:100%; border:0; border-radius:var(--radius);"
+               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+           </div>`
+        : (p.youtube_url ? `<div style="margin-top:8px;"><a href="${escapeHtml(p.youtube_url)}" target="_blank" style="color:var(--wine);">Watch on YouTube →</a></div>` : '')
+      }
+    `;
     return div;
   }
 
