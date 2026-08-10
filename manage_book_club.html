@@ -71,7 +71,7 @@
 
   const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
   const myRole = roleRow?.role;
-  const allowed = ['event_lead', 'organizer', 'admin'].includes(myRole);
+  const allowed = ['event_lead', 'organizer', 'admin', 'book_club_lead'].includes(myRole);
 
   if (!allowed) {
     document.getElementById('deniedNotice').style.display = 'block';
@@ -168,8 +168,23 @@
     loadList();
   });
 
+  function romanToInt(s) {
+    const map = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+    s = s.trim().toUpperCase();
+    if (!/^[IVXLCDM]+$/.test(s)) return null;
+    let total = 0;
+    for (let i = 0; i < s.length; i++) {
+      const cur = map[s[i]], next = map[s[i + 1]];
+      total += (next && cur < next) ? -cur : cur;
+    }
+    return total;
+  }
+
   function pageSortKey(pageNumber) {
-    const match = (pageNumber || '').match(/\d+/);
+    if (!pageNumber) return Infinity;
+    const roman = romanToInt(pageNumber);
+    if (roman !== null && roman > 0) return -100000 + roman;
+    const match = pageNumber.match(/\d+/);
     return match ? parseInt(match[0], 10) : Infinity;
   }
 
