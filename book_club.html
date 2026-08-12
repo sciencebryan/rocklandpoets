@@ -65,7 +65,7 @@
       ${sortedPoems.map(p => `
         <div style="margin-bottom:4px;">
           ${escapeHtml(p.poem_title)}${p.page_number ? ` <span class="meta">(p. ${escapeHtml(p.page_number)})</span>` : ''}
-          ${p.link_url ? ` — <a href="${escapeHtml(p.link_url)}" target="_blank" style="color:var(--wine);">online copy</a>` : ''}
+          ${p.link_url ? ` -- <a href="${escapeHtml(p.link_url)}" target="_blank" style="color:var(--wine);">online copy</a>` : ''}
         </div>
       `).join('')}
     </div>`;
