@@ -172,7 +172,7 @@
       <div>${totalSignups ? `${cutCount} of ${totalSignups} sign-ups (${((cutCount / totalSignups) * 100).toFixed(0)}%)` : 'Never signed up to compete'}</div>
       ${totalSignups ? `<div>Longest streak: ${longestStreak}</div><div>Most recent: ${escapeHtml(lastCut || 'Never')}</div>` : ''}
 
-      <h2 style="font-size:1.05rem; margin-top:20px;">Poems</h2>
+      <h2 style="font-size:1.05rem; margin-top:20px;">Slammed Poems</h2>
       <div>Note: percentages are relative to first-place person, not out of total number of votes -- e.g., if there were 30 votes cast, and the first place person got 20 votes, and you got 15 votes, it would show as 75% (15/20), not 50% (15/30), because we don't have total-votes-cast data.</div>
       <div id="poemsSortControls" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
         <button class="poem-sort-btn btn-primary" data-sort="date" style="width:auto; padding:8px 14px; font-size:0.85rem;">By date</button>
