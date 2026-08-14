@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Edit Attendee</title>
+<title>Rockland Poets -- Edit Attendee</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -36,13 +36,22 @@
       <label for="editPronouns">Pronouns</label>
       <input type="text" id="editPronouns">
       <label for="editReferral">Referral source</label>
-      <select id="editReferral"><option value="">— None —</option></select>
+      <select id="editReferral"><option value=""> None </option></select>
       <label for="editStatus">Status</label>
       <select id="editStatus">
         <option value="active">Active</option>
         <option value="inactive">Inactive</option>
         <option value="deceased">Deceased</option>
       </select>
+
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:0.95rem; font-weight:500; color:var(--ink); margin-top:16px;">
+        <input type="checkbox" id="editWantsEmail" style="width:18px; height:18px;">
+        Send monthly event updates by email
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:0.95rem; font-weight:500; color:var(--ink); margin-top:8px;">
+        <input type="checkbox" id="editWantsPhone" style="width:18px; height:18px;">
+        Send monthly event updates by text
+      </label>
 
       <div id="editError" class="error-box" style="display:none;"></div>
 
@@ -147,6 +156,8 @@
     document.getElementById('editPronouns').value = a.pronouns || '';
     document.getElementById('editReferral').value = a.referral_source_id || '';
     document.getElementById('editStatus').value = a.status || 'active';
+    document.getElementById('editWantsEmail').checked = !!a.wants_email_updates;
+    document.getElementById('editWantsPhone').checked = !!a.wants_phone_updates;
     document.getElementById('editError').style.display = 'none';
     document.getElementById('editForm').style.display = 'block';
   }
@@ -164,15 +175,20 @@
     const first = document.getElementById('editFirst').value.trim();
     if (!first) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
 
+    const emailVal = document.getElementById('editEmail').value.trim();
+    const phoneVal = document.getElementById('editPhone').value.trim();
+
     const payload = {
       first_name: first,
       last_name: document.getElementById('editLast').value.trim() || null,
       nickname: document.getElementById('editNickname').value.trim() || null,
-      email: document.getElementById('editEmail').value.trim() || null,
-      phone: document.getElementById('editPhone').value.trim() || null,
+      email: emailVal || null,
+      phone: phoneVal || null,
       pronouns: document.getElementById('editPronouns').value.trim() || null,
       referral_source_id: document.getElementById('editReferral').value || null,
       status: document.getElementById('editStatus').value,
+      wants_email_updates: !!emailVal && document.getElementById('editWantsEmail').checked,
+      wants_phone_updates: !!phoneVal && document.getElementById('editWantsPhone').checked,
     };
 
     const { error } = await supabase.from('attendees').update(payload).eq('id', editingId);

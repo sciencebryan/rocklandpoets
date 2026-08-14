@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Poem Lookup</title>
+<title>Rockland Poets Poem Lookup</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
   </div>
 
   <h1 style="font-size:1.4rem; margin-bottom:6px;">What have I read?</h1>
-  <p class="meta" style="margin-bottom:20px;">Find your name to see every poem you've read at a slam — handy for the no-repeat rule.</p>
+  <p class="meta" style="margin-bottom:20px;">Search your name to see a list of every poem you've used in one of our slams since 2022. These poems can't be used in the first round of our slams because of our first-round 'no repeat' rule.</p>
 
   <input type="text" id="search" placeholder="Type your name…" autocomplete="off" style="margin-bottom:12px;">
 
@@ -120,7 +120,7 @@
 
     const sorted = [...poems].sort((a, b) => (dateById[b.event_id] || '').localeCompare(dateById[a.event_id] || ''));
 
-    historyEl.innerHTML = `<h2 style="font-size:1.1rem; margin:16px 0 10px;">${escapeHtml(name)} — ${poems.length} poem${poems.length === 1 ? '' : 's'}</h2>`;
+    historyEl.innerHTML = `<h2 style="font-size:1.1rem; margin:16px 0 10px;">${escapeHtml(name)} -- ${poems.length} poem${poems.length === 1 ? '' : 's'}</h2>`;
     for (const p of sorted) {
       const div = document.createElement('div');
       div.className = 'roster-row';

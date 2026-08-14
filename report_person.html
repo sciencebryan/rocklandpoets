@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Person Report</title>
+<title>Rockland Poets Person Report</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -162,10 +162,10 @@
       <h2 style="font-size:1.05rem; margin-top:20px;">Slam record</h2>
       <div>Times slammed: ${timesSlammed}</div>
       <div class="mono" style="margin-top:6px;">
-        <div>1st place — season: ${placementCounts.season[1]}, overall: ${placementCounts.overall[1]}</div>
-        <div>2nd place — season: ${placementCounts.season[2]}, overall: ${placementCounts.overall[2]}</div>
-        <div>3rd place — season: ${placementCounts.season[3]}, overall: ${placementCounts.overall[3]}</div>
-        <div>4th place — season: ${placementCounts.season[4]}, overall: ${placementCounts.overall[4]}</div>
+        <div>1st place -- season: ${placementCounts.season[1]}, overall: ${placementCounts.overall[1]}</div>
+        <div>2nd place -- season: ${placementCounts.season[2]}, overall: ${placementCounts.overall[2]}</div>
+        <div>3rd place -- season: ${placementCounts.season[3]}, overall: ${placementCounts.overall[3]}</div>
+        <div>4th place -- season: ${placementCounts.season[4]}, overall: ${placementCounts.overall[4]}</div>
       </div>
 
       <h2 style="font-size:1.05rem; margin-top:20px;">Randomized out</h2>
@@ -254,7 +254,7 @@
       row.className = 'roster-row';
       row.innerHTML = `
         <span class="name">${escapeHtml(p.title)} <span class="meta">(Round ${p.round}, ${escapeHtml(p.date)})</span></span>
-        <span class="mono">${p.votes ?? '—'}v${p.percent != null ? ` · ${p.percent}%` : ''}</span>
+        <span class="mono">${p.votes ?? '--'}v${p.percent != null ? ` · ${p.percent}%` : ''}</span>
       `;
       listEl.appendChild(row);
     }

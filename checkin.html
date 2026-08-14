@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Check In</title>
+<title>Rockland Poets Check In</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -29,7 +29,7 @@
     </select>
     <label for="venuePicker">Venue</label>
     <select id="venuePicker">
-      <option value="">— No venue set —</option>
+      <option value=""> No venue set </option>
       <option value="__new__">+ Add a new venue…</option>
     </select>
     <div id="newVenueFields" style="display:none; margin-top:8px;">
@@ -51,7 +51,7 @@
     <div id="confirmPanel" class="card" style="display:none; border-left: 4px solid var(--accent-2);">
       <div style="font-weight:600; margin-bottom:8px;">Is this you?</div>
       <div id="confirmList"></div>
-      <button class="btn-ghost" id="cancelConfirm" style="margin-top:8px;">None of these — cancel</button>
+      <button class="btn-ghost" id="cancelConfirm" style="margin-top:8px;">None of these -- cancel</button>
     </div>
 
     <div id="addForm" class="card" style="display:none;">
@@ -64,7 +64,7 @@
       <label for="addLast">Last name (or just an initial)</label>
       <input type="text" id="addLast">
 
-      <label for="addNickname">Nickname — if you'd rather go by this publicly</label>
+      <label for="addNickname">Nickname (how your name will show up on the page)</label>
       <input type="text" id="addNickname">
 
       <label for="addEmail">Email (optional)</label>
@@ -74,17 +74,26 @@
       <input type="tel" id="addPhone">
 
       <label for="addReferral">How'd you hear about us? (optional)</label>
-      <select id="addReferral"><option value="">— Select —</option></select>
+      <select id="addReferral"><option value=""> Select </option></select>
 
       <label for="addPronouns">Pronouns (optional)</label>
       <input type="text" id="addPronouns">
 
       <label for="addPhotoConsent">Okay to post event photos of you? (optional)</label>
       <select id="addPhotoConsent">
-        <option value="">— Select —</option>
+        <option value=""> Select </option>
         <option value="Yes, you can post photos that I'm in">Yes, that's fine</option>
         <option value="No, please blur me out of any photos you post">No, please blur me out</option>
       </select>
+
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:0.95rem; font-weight:500; color:var(--ink); margin-top:16px;">
+        <input type="checkbox" id="addWantsEmail" style="width:18px; height:18px;">
+        Send me monthly event updates by email
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:0.95rem; font-weight:500; color:var(--ink); margin-top:8px;">
+        <input type="checkbox" id="addWantsPhone" style="width:18px; height:18px;">
+        Send me monthly event updates by text
+      </label>
 
       <div id="addError" class="error-box" style="display:none;"></div>
 
@@ -109,7 +118,7 @@
       <h2 style="font-size:1.1rem; margin-top:20px; margin-bottom:10px;">Tonight's competing order</h2>
       <div id="competingList"></div>
       <div id="cutListWrapper" style="display:none; margin-top:16px;">
-        <div class="meta" style="margin-bottom:8px;">Randomized out (still eligible to compete another night):</div>
+        <div class="meta" style="margin-bottom:8px;">Randomized out:</div>
         <div id="cutList"></div>
       </div>
     </div>
@@ -243,7 +252,7 @@
     const { data: created, error: createError } = await supabase.from('events').insert({ event_date: dateStr, event_type: eventType, venue_id: venueId || null }).select().single();
     if (createError) {
       if (createError.code === '42501' || createError.message?.includes('policy')) {
-        toast("This event hasn't been started yet — ask an event lead to create it first.");
+        toast("This event hasn't been started yet -- ask an event lead to create it first.");
       } else {
         toast('Error creating event: ' + createError.message);
       }
@@ -415,7 +424,7 @@
   }
 
   function promptSignup(attendeeId, name) {
-    document.getElementById('signupPromptText').textContent = `${name} — want to sign up to compete tonight?`;
+    document.getElementById('signupPromptText').textContent = `${name} -- want to sign up to compete tonight?`;
     document.getElementById('signupPrompt').style.display = 'block';
 
     const yesBtn = document.getElementById('signupYes');
@@ -461,15 +470,20 @@
 
     if (!first) { errEl.textContent = 'First name is required.'; errEl.style.display = 'block'; return; }
 
+    const emailVal = document.getElementById('addEmail').value.trim();
+    const phoneVal = document.getElementById('addPhone').value.trim();
+
     const payload = {
       first_name: first,
       last_name: document.getElementById('addLast').value.trim() || null,
       nickname: document.getElementById('addNickname').value.trim() || null,
-      email: document.getElementById('addEmail').value.trim() || null,
-      phone: document.getElementById('addPhone').value.trim() || null,
+      email: emailVal || null,
+      phone: phoneVal || null,
       referral_source_id: document.getElementById('addReferral').value || null,
       pronouns: document.getElementById('addPronouns').value.trim() || null,
       photo_consent: document.getElementById('addPhotoConsent').value || null,
+      wants_email_updates: !!emailVal && document.getElementById('addWantsEmail').checked,
+      wants_phone_updates: !!phoneVal && document.getElementById('addWantsPhone').checked,
     };
 
     const { data: newAttendee, error } = await supabase.from('attendees').insert(payload).select().single();
@@ -482,6 +496,8 @@
     document.getElementById('addEmail').value = '';
     document.getElementById('addPhone').value = '';
     document.getElementById('addPronouns').value = '';
+    document.getElementById('addWantsEmail').checked = false;
+    document.getElementById('addWantsPhone').checked = false;
 
     await checkIn(newAttendee.id, first);
   });

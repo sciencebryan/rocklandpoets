@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Event Report</title>
+<title>Rockland Poets Event Report</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
   </div>
 
   <h1 style="font-size:1.3rem; margin-bottom:12px;">Event report</h1>
-  <select id="eventPicker" style="margin-bottom:16px;"><option value="">— Choose an event —</option></select>
+  <select id="eventPicker" style="margin-bottom:16px;"><option value=""> Choose an event </option></select>
 
   <div id="report"></div>
 </div>
@@ -46,7 +46,7 @@
   for (const ev of events || []) {
     const opt = document.createElement('option');
     opt.value = ev.id;
-    opt.textContent = `${ev.event_date} — ${TYPE_LABEL[ev.event_type] || ev.event_type}`;
+    opt.textContent = `${ev.event_date} -- ${TYPE_LABEL[ev.event_type] || ev.event_type}`;
     picker.appendChild(opt);
   }
 
@@ -69,19 +69,12 @@
     let venueLabel = '';
     if (ev.venue_id) {
       const { data: v } = await supabase.from('venues').select('name, city, state').eq('id', ev.venue_id).maybeSingle();
-      if (v) venueLabel = ` — ${[v.name, v.city, v.state].filter(Boolean).join(', ')}`;
+      if (v) venueLabel = ` -- ${[v.name, v.city, v.state].filter(Boolean).join(', ')}`;
     }
     const personLink = (id, text) => `<a href="report_person.html?id=${id}" style="color:var(--wine); text-decoration:underline;">${escapeHtml(text)}</a>`;
 
     const { data: attendanceRows } = await supabase.from('attendance').select('attendee_id').eq('event_id', eventId);
     const checkedInIds = (attendanceRows || []).map(r => r.attendee_id);
-
-    const attendeeNames = await fetchNames(checkedInIds);
-    const newIdsSet = new Set(newIds);
-    const attendeeListHtml = checkedInIds.length
-      ? [...checkedInIds].sort((a, b) => (attendeeNames[a] || '').localeCompare(attendeeNames[b] || ''))
-          .map(id => `<div class="roster-row"><span class="name">${personLink(id, attendeeNames[id])}${newIdsSet.has(id) ? ' <span title="First event" style="color:var(--brass);">*</span>' : ''}</span></div>`).join('')
-      : '<div class="empty-state">No one checked in.</div>';
 
     // Determine who's "new" -- this is their earliest-ever attendance
     let newIds = [];
@@ -113,6 +106,13 @@
       }
     }
 
+    const attendeeNames = await fetchNames(checkedInIds);
+    const newIdsSet = new Set(newIds);
+    const attendeeListHtml = checkedInIds.length
+      ? [...checkedInIds].sort((a, b) => (attendeeNames[a] || '').localeCompare(attendeeNames[b] || ''))
+          .map(id => `<div class="roster-row"><span class="name">${personLink(id, attendeeNames[id])}${newIdsSet.has(id) ? ' <span title="First event" style="color:var(--brass);">*</span>' : ''}</span></div>`).join('')
+      : '<div class="empty-state">No one checked in.</div>';
+
     let slamSection = '';
     if (ev.event_type === 'slam') {
       const { data: placements } = await supabase.from('all_placements').select('attendee_id, placement').eq('event_id', eventId).lte('placement', 4).order('placement');
@@ -135,7 +135,7 @@
       const roundsHtml = Object.entries(roundsByNumber).map(([num, rows]) => `
         <div style="margin-top:8px;">
           <strong>Round ${num}</strong>
-          ${rows.map(r => `<div class="roster-row"><span class="name">${personLink(r.attendee_id, names[r.attendee_id])} — ${escapeHtml(r.poem_title)}</span><span class="mono meta">${r.votes ?? '—'}v</span></div>`).join('')}
+          ${rows.map(r => `<div class="roster-row"><span class="name">${personLink(r.attendee_id, names[r.attendee_id])} -- ${escapeHtml(r.poem_title)}</span><span class="mono meta">${r.votes ?? '--'}v</span></div>`).join('')}
         </div>
       `).join('');
 
@@ -153,7 +153,7 @@
 
     reportEl.innerHTML = `
       <div class="card">
-        <div><strong>${ev.event_date}</strong> — ${TYPE_LABEL[ev.event_type] || ev.event_type}${venueLabel}</div>
+        <div><strong>${ev.event_date}</strong> -- ${TYPE_LABEL[ev.event_type] || ev.event_type}${venueLabel}</div>
         <div>Checked in: ${checkedInIds.length}</div>
         <div>New people: ${newIds.length}</div>
         ${newIds.length ? `<div class="meta">${Object.entries(referralBreakdown).map(([label, count]) => `${escapeHtml(label)}: ${count}`).join(' · ')}</div>` : ''}

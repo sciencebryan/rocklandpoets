@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rockland Poets — Round Entry</title>
+<title>Rockland Poets -- Slam Round Entry</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -81,8 +81,8 @@
     const { data: ev, error } = await supabase.from('events').select('*').eq('event_date', dateStr).maybeSingle();
     if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
     if (!ev) { errEl.textContent = "No event found for that date. Start it from the check-in page first."; errEl.style.display = 'block'; return; }
-    if (ev.event_type !== 'slam') { errEl.textContent = "This isn't a slam night — no rounds to score."; errEl.style.display = 'block'; return; }
-    if (!ev.signups_closed_at) { errEl.textContent = "Sign-ups haven't been closed yet — do that on the check-in page first."; errEl.style.display = 'block'; return; }
+    if (ev.event_type !== 'slam') { errEl.textContent = "This isn't a slam night -- no rounds to score."; errEl.style.display = 'block'; return; }
+    if (!ev.signups_closed_at) { errEl.textContent = "Sign-ups haven't been closed yet -- do that on the check-in page first."; errEl.style.display = 'block'; return; }
 
     currentEvent = ev;
     sessionStorage.setItem('rp_event_date', ev.event_date);
@@ -175,7 +175,7 @@
 
     const container = document.getElementById('roundEntry');
     container.innerHTML = `<div class="meta" style="margin-bottom:10px;">
-      ${roundNumber === 1 ? "Tonight's drawn order — uncheck anyone who isn't reading." : "Uncheck anyone who didn't advance to this round."}
+      ${roundNumber === 1 ? "Tonight's random order -- uncheck anyone who isn't reading." : "Uncheck anyone who didn't advance to this round."}
     </div>`;
 
     for (const attendeeId of candidates) {
@@ -193,7 +193,7 @@
       card.innerHTML = `
         <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-size:1rem; font-weight:600; color:var(--ink); margin:0 0 10px;">
           <input type="checkbox" class="participating" data-attendee="${attendeeId}" ${prior || roundNumber === 1 ? 'checked' : ''} style="width:20px; height:20px;">
-          ${escapeHtml(name)}${stageName ? ` <span class="meta" style="font-weight:500;">— announce as "${escapeHtml(stageName)}" tonight</span>` : ''}
+          ${escapeHtml(name)}${stageName ? ` <span class="meta" style="font-weight:500;">-- announce as "${escapeHtml(stageName)}" tonight</span>` : ''}
         </label>
         <div class="roundFields" style="display:${prior || roundNumber === 1 ? 'block' : 'none'};">
           <label>Poem title</label>
@@ -261,7 +261,7 @@
 
     const el = document.getElementById('standings');
     if (error || !data || data.length === 0) {
-      el.innerHTML = '<div class="empty-state">No results yet — save a round to see standings.</div>';
+      el.innerHTML = '<div class="empty-state">No results yet -- save a round to see standings.</div>';
       return;
     }
 
