@@ -131,6 +131,8 @@
       btn.addEventListener('click', () => showRound(r));
       tabsEl.appendChild(btn);
     }
+
+    document.getElementById('addRoundBtn').style.display = maxRound < 3 ? 'inline-block' : 'none';
   }
 
   document.getElementById('addRoundBtn').addEventListener('click', async () => {
@@ -175,7 +177,7 @@
 
     const container = document.getElementById('roundEntry');
     container.innerHTML = `<div class="meta" style="margin-bottom:10px;">
-      ${roundNumber === 1 ? "Tonight's random order -- uncheck anyone who isn't reading." : "Uncheck anyone who didn't advance to this round."}
+      ${roundNumber === 1 ? "Tonight's random order -- uncheck anyone who isn't reading." : "Check the box for anyone who advanced to this round."}
     </div>`;
 
     for (const attendeeId of candidates) {
