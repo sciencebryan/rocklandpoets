@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rockland Poets Event Staffing</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
+    <a href="checkin.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Check-in</a>
+  </div>
+
+  <h1 style="font-size:1.3rem; margin-bottom:12px;">Event staffing</h1>
+  <select id="eventPicker" style="margin-bottom:16px;"><option value=""> Choose an event </option></select>
+
+  <div id="staffArea" style="display:none;">
+    <div id="rolesList"></div>
+
+    <div id="adminControls" style="display:none;">
+      <div class="card" style="margin-top:16px;">
+        <div style="font-weight:600; margin-bottom:8px;">Add a role assignment</div>
+        <label for="roleInput">Role</label>
+        <input type="text" id="roleInput" placeholder="Door, Host, or anything else" list="commonRoles">
+        <datalist id="commonRoles">
+          <option value="Door">
+          <option value="Host">
+        </datalist>
+        <label for="personPicker">Person</label>
+        <select id="personPicker"><option value=""> Choose </option><option value="__new__">+ Add a new person...</option></select>
+        <div id="newPersonFields" style="display:none; margin-top:8px;">
+          <label for="newPersonName">Name</label>
+          <input type="text" id="newPersonName">
+        </div>
+        <div id="assignError" class="error-box" style="display:none;"></div>
+        <button class="btn-primary" id="assignBtn" style="margin-top:16px;">Assign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) window.location.href = 'login.html';
+
+  const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
+  const isAdmin = roleRow?.role === 'admin';
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  const MAX_PER_ROLE = 2;
+  let currentEventId = null;
+
+  // Only slam and open_mic events -- not workshops
+  const picker = document.getElementById('eventPicker');
+  const { data: events } = await supabase.from('events').select('id, event_date, event_type')
+    .in('event_type', ['slam', 'open_mic']).order('event_date', { ascending: false });
+  const TYPE_LABEL = { slam: 'Slam', open_mic: 'Open mic' };
+  for (const ev of events || []) {
+    const opt = document.createElement('option');
+    opt.value = ev.id;
+    opt.textContent = `${ev.event_date} — ${TYPE_LABEL[ev.event_type]}`;
+    picker.appendChild(opt);
+  }
+
+  picker.addEventListener('change', () => {
+    if (picker.value) {
+      currentEventId = parseInt(picker.value, 10);
+      document.getElementById('staffArea').style.display = 'block';
+      document.getElementById('adminControls').style.display = isAdmin ? 'block' : 'none';
+      loadAssignments();
+    } else {
+      currentEventId = null;
+      document.getElementById('staffArea').style.display = 'none';
+    }
+  });
+
+  async function loadPersonPicker() {
+    const { data } = await supabase.from('event_staff_pool').select('id, name').order('name');
+    const sel = document.getElementById('personPicker');
+    sel.innerHTML = '<option value="">— Choose —</option>';
+    for (const p of data || []) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      sel.appendChild(opt);
+    }
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ Add a new person…';
+    sel.appendChild(newOpt);
+  }
+  if (isAdmin) loadPersonPicker();
+
+  document.getElementById('personPicker').addEventListener('change', (e) => {
+    document.getElementById('newPersonFields').style.display = e.target.value === '__new__' ? 'block' : 'none';
+  });
+
+  async function resolvePersonId() {
+    const picked = document.getElementById('personPicker').value;
+    if (!picked) return undefined;
+    if (picked !== '__new__') return parseInt(picked, 10);
+
+    const name = document.getElementById('newPersonName').value.trim();
+    if (!name) { toast('Name is required to add a new person.'); return undefined; }
+    const { data, error } = await supabase.from('event_staff_pool').insert({ name }).select().single();
+    if (error) { toast('Could not add person: ' + error.message); return undefined; }
+    await loadPersonPicker();
+    return data.id;
+  }
+
+  document.getElementById('assignBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('assignError');
+    errEl.style.display = 'none';
+
+    const role = document.getElementById('roleInput').value.trim();
+    if (!role) { errEl.textContent = 'Role is required.'; errEl.style.display = 'block'; return; }
+
+    const personId = await resolvePersonId();
+    if (personId === undefined) return;
+
+    const { count } = await supabase.from('event_staff_assignments')
+      .select('id', { count: 'exact', head: true }).eq('event_id', currentEventId).eq('role_label', role);
+    if ((count ?? 0) >= MAX_PER_ROLE) {
+      errEl.textContent = `${role} already has ${MAX_PER_ROLE} people assigned -- remove one first.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const { error } = await supabase.from('event_staff_assignments').insert({
+      event_id: currentEventId, role_label: role, person_id: personId,
+    });
+    if (error) {
+      errEl.textContent = error.code === '23505' ? 'That person is already assigned to this role.' : 'Could not assign: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    document.getElementById('roleInput').value = '';
+    document.getElementById('personPicker').value = '';
+    document.getElementById('newPersonFields').style.display = 'none';
+    document.getElementById('newPersonName').value = '';
+    toast('Assigned.');
+    loadAssignments();
+  });
+
+  async function loadAssignments() {
+    const { data, error } = await supabase.from('event_staff_assignments')
+      .select('id, role_label, person_id').eq('event_id', currentEventId);
+    const listEl = document.getElementById('rolesList');
+
+    if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
+    if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No one assigned yet.</div>'; return; }
+
+    const personIds = [...new Set(data.map(a => a.person_id))];
+    const { data: people } = await supabase.from('event_staff_pool').select('id, name').in('id', personIds);
+    const nameById = Object.fromEntries((people || []).map(p => [p.id, p.name]));
+
+    const byRole = {};
+    for (const a of data) (byRole[a.role_label] ||= []).push(a);
+
+    // Door and Host first if present, then any extra roles alphabetically
+    const roleOrder = Object.keys(byRole).sort((a, b) => {
+      const priority = { Door: 0, Host: 1 };
+      const pa = priority[a] ?? 2, pb = priority[b] ?? 2;
+      return pa !== pb ? pa - pb : a.localeCompare(b);
+    });
+
+    listEl.innerHTML = '';
+    for (const role of roleOrder) {
+      const section = document.createElement('div');
+      section.style.marginBottom = '16px';
+      section.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">${escapeHtml(role)}</div>`;
+      for (const a of byRole[role]) {
+        const row = document.createElement('div');
+        row.className = 'roster-row';
+        row.innerHTML = `<span class="name">${escapeHtml(nameById[a.person_id] || '(unknown)')}</span>`;
+        if (isAdmin) {
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = 'Remove';
+          removeBtn.className = 'btn-ghost';
+          removeBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+          removeBtn.addEventListener('click', async () => {
+            const { error } = await supabase.from('event_staff_assignments').delete().eq('id', a.id);
+            if (error) { toast('Could not remove: ' + error.message); return; }
+            loadAssignments();
+          });
+          row.appendChild(removeBtn);
+        }
+        section.appendChild(row);
+      }
+      listEl.appendChild(section);
+    }
+  }
+</script>
+</body>
+</html>
