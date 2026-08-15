@@ -5,39 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rockland Poets Event Staffing</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  .staff-table { border-collapse: collapse; width: max-content; min-width: 100%; }
+  .staff-table th, .staff-table td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  .staff-table th { background: var(--paper); position: sticky; top: 0; z-index: 1; }
+  .staff-table th.corner { position: sticky; left: 0; z-index: 2; background: var(--paper); }
+  .staff-table td.event-cell { font-weight: 600; position: sticky; left: 0; background: var(--paper-raised); }
+  .staff-table td.assign-cell { cursor: default; min-width: 90px; }
+  .staff-table td.assign-cell.clickable { cursor: pointer; }
+  .staff-table td.assign-cell.clickable:hover { background: var(--moss-bg); }
+  .staff-table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); max-height: 70vh; overflow-y: auto; }
+</style>
 </head>
 <body>
-<div class="page">
+<div class="page" style="max-width: 100%;">
   <div class="header">
     <img src="logo.png" alt="Rockland Poets" style="height:44px; width:auto;">
     <a href="checkin.html" style="font-size:0.8rem; color:var(--wine); text-decoration:none;">← Check-in</a>
   </div>
 
-  <h1 style="font-size:1.3rem; margin-bottom:12px;">Event staffing</h1>
-  <select id="eventPicker" style="margin-bottom:16px;"><option value=""> Choose an event </option></select>
+  <h1 style="font-size:1.3rem; margin-bottom:6px;">Event staffing</h1>
+  <p class="meta" style="margin-bottom:16px;">Click a cell to assign or edit who's working that role.</p>
 
-  <div id="staffArea" style="display:none;">
-    <div id="rolesList"></div>
+  <div id="addRoleRow" style="display:none; margin-bottom:12px;">
+    <input type="text" id="newRoleName" placeholder="Add a role column (e.g. Setup)" style="display:inline-block; width:auto; max-width:220px;">
+    <button class="btn-secondary" id="addRoleBtn" style="display:inline-block; width:auto; padding:12px 16px;">+ Add role column</button>
+  </div>
 
-    <div id="adminControls" style="display:none;">
-      <div class="card" style="margin-top:16px;">
-        <div style="font-weight:600; margin-bottom:8px;">Add a role assignment</div>
-        <label for="roleInput">Role</label>
-        <input type="text" id="roleInput" placeholder="Door, Host, or anything else" list="commonRoles">
-        <datalist id="commonRoles">
-          <option value="Door">
-          <option value="Host">
-        </datalist>
-        <label for="personPicker">Person</label>
-        <select id="personPicker"><option value=""> Choose </option><option value="__new__">+ Add a new person...</option></select>
-        <div id="newPersonFields" style="display:none; margin-top:8px;">
-          <label for="newPersonName">Name</label>
-          <input type="text" id="newPersonName">
-        </div>
-        <div id="assignError" class="error-box" style="display:none;"></div>
-        <button class="btn-primary" id="assignBtn" style="margin-top:16px;">Assign</button>
+  <div class="staff-table-wrapper">
+    <table class="staff-table" id="staffTable"></table>
+  </div>
+
+  <button class="btn-secondary" id="loadMoreBtn" style="margin-top:16px;">Load more months</button>
+
+  <div id="editPanel" class="card" style="display:none; margin-top:20px;">
+    <div id="editPanelTitle" style="font-weight:600; margin-bottom:10px;"></div>
+    <div id="editPanelList" style="margin-bottom:12px;"></div>
+    <div id="editPanelAdd" style="display:none;">
+      <select id="personPicker"><option value=""> Choose </option><option value="__new__">+ Add a new person...</option></select>
+      <div id="newPersonFields" style="display:none; margin-top:8px;">
+        <label for="newPersonName">Name</label>
+        <input type="text" id="newPersonName">
       </div>
+      <div id="assignError" class="error-box" style="display:none;"></div>
+      <button class="btn-primary" id="assignBtn" style="margin-top:12px;">Add</button>
     </div>
+    <button class="btn-ghost" id="closePanelBtn" style="margin-top:8px;">Close</button>
   </div>
 </div>
 
@@ -53,6 +73,7 @@
 
   const { data: roleRow } = await supabase.from('organizer_roles').select('role').eq('user_id', session.user.id).maybeSingle();
   const isAdmin = roleRow?.role === 'admin';
+  if (isAdmin) document.getElementById('addRoleRow').style.display = 'block';
 
   function toast(msg) {
     const el = document.getElementById('toast');
@@ -60,7 +81,6 @@
     el.classList.add('show');
     setTimeout(() => el.classList.remove('show'), 2200);
   }
-
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str == null ? '' : String(str);
@@ -68,31 +88,100 @@
   }
 
   const MAX_PER_ROLE = 2;
-  let currentEventId = null;
-
-  // Only slam and open_mic events -- not workshops
-  const picker = document.getElementById('eventPicker');
-  const { data: events } = await supabase.from('events').select('id, event_date, event_type')
-    .in('event_type', ['slam', 'open_mic']).order('event_date', { ascending: false });
   const TYPE_LABEL = { slam: 'Slam', open_mic: 'Open mic' };
-  for (const ev of events || []) {
-    const opt = document.createElement('option');
-    opt.value = ev.id;
-    opt.textContent = `${ev.event_date} — ${TYPE_LABEL[ev.event_type]}`;
-    picker.appendChild(opt);
+
+  function addMonths(date, n) {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + n);
+    return d;
+  }
+  const isoDate = (d) => d.toISOString().slice(0, 10);
+
+  let rangeStart = isoDate(addMonths(new Date(), -1));
+  let rangeEnd = isoDate(addMonths(new Date(), 6));
+  let extraRoleCols = []; // role labels added this session with no assignments yet
+  let events = [];
+  let assignments = [];
+  let nameById = {};
+
+  async function loadData() {
+    const { data: evData } = await supabase.from('events').select('id, event_date, event_type')
+      .in('event_type', ['slam', 'open_mic'])
+      .gte('event_date', rangeStart).lte('event_date', rangeEnd)
+      .order('event_date', { ascending: true });
+    events = evData || [];
+
+    const eventIds = events.map(e => e.id);
+    const { data: asgData } = eventIds.length
+      ? await supabase.from('event_staff_assignments').select('id, event_id, role_label, person_id').in('event_id', eventIds)
+      : { data: [] };
+    assignments = asgData || [];
+
+    const personIds = [...new Set(assignments.map(a => a.person_id))];
+    if (personIds.length) {
+      const { data: people } = await supabase.from('event_staff_pool').select('id, name').in('id', personIds);
+      nameById = Object.fromEntries((people || []).map(p => [p.id, p.name]));
+    } else {
+      nameById = {};
+    }
+
+    renderTable();
   }
 
-  picker.addEventListener('change', () => {
-    if (picker.value) {
-      currentEventId = parseInt(picker.value, 10);
-      document.getElementById('staffArea').style.display = 'block';
-      document.getElementById('adminControls').style.display = isAdmin ? 'block' : 'none';
-      loadAssignments();
-    } else {
-      currentEventId = null;
-      document.getElementById('staffArea').style.display = 'none';
+  function getRoleCols() {
+    const usedRoles = [...new Set(assignments.map(a => a.role_label))];
+    const allRoles = new Set(['Door', 'Host', ...usedRoles, ...extraRoleCols]);
+    return [...allRoles].sort((a, b) => {
+      const priority = { Door: 0, Host: 1 };
+      const pa = priority[a] ?? 2, pb = priority[b] ?? 2;
+      return pa !== pb ? pa - pb : a.localeCompare(b);
+    });
+  }
+
+  function renderTable() {
+    const table = document.getElementById('staffTable');
+    const roles = getRoleCols();
+
+    let html = '<thead><tr><th class="corner">Event</th>';
+    for (const role of roles) html += `<th>${escapeHtml(role)}</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (const ev of events) {
+      html += `<tr><td class="event-cell">${escapeHtml(ev.event_date)}<br><span class="meta">${TYPE_LABEL[ev.event_type]}</span></td>`;
+      for (const role of roles) {
+        const cellAssignments = assignments.filter(a => a.event_id === ev.id && a.role_label === role);
+        const names = cellAssignments.map(a => escapeHtml(nameById[a.person_id] || '?')).join(', ') || '—';
+        const clickable = isAdmin ? 'clickable' : '';
+        html += `<td class="assign-cell ${clickable}" data-event-id="${ev.id}" data-role="${escapeHtml(role)}">${names}</td>`;
+      }
+      html += '</tr>';
     }
+    html += '</tbody>';
+    table.innerHTML = html;
+
+    if (isAdmin) {
+      table.querySelectorAll('td.assign-cell.clickable').forEach(td => {
+        td.addEventListener('click', () => openEditPanel(parseInt(td.dataset.eventId, 10), td.dataset.role));
+      });
+    }
+  }
+
+  document.getElementById('loadMoreBtn').addEventListener('click', () => {
+    rangeStart = isoDate(addMonths(new Date(rangeStart), -3));
+    rangeEnd = isoDate(addMonths(new Date(rangeEnd), 3));
+    loadData();
   });
+
+  document.getElementById('addRoleBtn').addEventListener('click', () => {
+    const name = document.getElementById('newRoleName').value.trim();
+    if (!name) return;
+    if (!extraRoleCols.includes(name)) extraRoleCols.push(name);
+    document.getElementById('newRoleName').value = '';
+    renderTable();
+  });
+
+  // ---- Edit panel ----
+  let editingEventId = null, editingRole = null;
 
   async function loadPersonPicker() {
     const { data } = await supabase.from('event_staff_pool').select('id, name').order('name');
@@ -109,22 +198,66 @@
     newOpt.textContent = '+ Add a new person…';
     sel.appendChild(newOpt);
   }
-  if (isAdmin) loadPersonPicker();
 
   document.getElementById('personPicker').addEventListener('change', (e) => {
     document.getElementById('newPersonFields').style.display = e.target.value === '__new__' ? 'block' : 'none';
+  });
+
+  async function openEditPanel(eventId, role) {
+    editingEventId = eventId;
+    editingRole = role;
+    const ev = events.find(e => e.id === eventId);
+    document.getElementById('editPanelTitle').textContent = `${role} — ${ev.event_date} (${TYPE_LABEL[ev.event_type]})`;
+
+    await loadPersonPicker();
+    renderEditPanelList();
+    document.getElementById('editPanel').style.display = 'block';
+    document.getElementById('editPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function renderEditPanelList() {
+    const current = assignments.filter(a => a.event_id === editingEventId && a.role_label === editingRole);
+    const listEl = document.getElementById('editPanelList');
+    listEl.innerHTML = '';
+    if (current.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">No one assigned yet.</div>';
+    }
+    for (const a of current) {
+      const row = document.createElement('div');
+      row.className = 'roster-row';
+      row.innerHTML = `<span class="name">${escapeHtml(nameById[a.person_id] || '(unknown)')}</span>`;
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = 'Remove';
+      removeBtn.className = 'btn-ghost';
+      removeBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
+      removeBtn.addEventListener('click', async () => {
+        const { error } = await supabase.from('event_staff_assignments').delete().eq('id', a.id);
+        if (error) { toast('Could not remove: ' + error.message); return; }
+        assignments = assignments.filter(x => x.id !== a.id);
+        renderEditPanelList();
+        renderTable();
+      });
+      row.appendChild(removeBtn);
+      listEl.appendChild(row);
+    }
+    document.getElementById('editPanelAdd').style.display = current.length < MAX_PER_ROLE ? 'block' : 'none';
+  }
+
+  document.getElementById('closePanelBtn').addEventListener('click', () => {
+    document.getElementById('editPanel').style.display = 'none';
+    document.getElementById('personPicker').value = '';
+    document.getElementById('newPersonFields').style.display = 'none';
+    document.getElementById('assignError').style.display = 'none';
   });
 
   async function resolvePersonId() {
     const picked = document.getElementById('personPicker').value;
     if (!picked) return undefined;
     if (picked !== '__new__') return parseInt(picked, 10);
-
     const name = document.getElementById('newPersonName').value.trim();
     if (!name) { toast('Name is required to add a new person.'); return undefined; }
     const { data, error } = await supabase.from('event_staff_pool').insert({ name }).select().single();
     if (error) { toast('Could not add person: ' + error.message); return undefined; }
-    await loadPersonPicker();
     return data.id;
   }
 
@@ -132,22 +265,11 @@
     const errEl = document.getElementById('assignError');
     errEl.style.display = 'none';
 
-    const role = document.getElementById('roleInput').value.trim();
-    if (!role) { errEl.textContent = 'Role is required.'; errEl.style.display = 'block'; return; }
-
     const personId = await resolvePersonId();
     if (personId === undefined) return;
 
-    const { count } = await supabase.from('event_staff_assignments')
-      .select('id', { count: 'exact', head: true }).eq('event_id', currentEventId).eq('role_label', role);
-    if ((count ?? 0) >= MAX_PER_ROLE) {
-      errEl.textContent = `${role} already has ${MAX_PER_ROLE} people assigned -- remove one first.`;
-      errEl.style.display = 'block';
-      return;
-    }
-
     const { error } = await supabase.from('event_staff_assignments').insert({
-      event_id: currentEventId, role_label: role, person_id: personId,
+      event_id: editingEventId, role_label: editingRole, person_id: personId,
     });
     if (error) {
       errEl.textContent = error.code === '23505' ? 'That person is already assigned to this role.' : 'Could not assign: ' + error.message;
@@ -155,62 +277,14 @@
       return;
     }
 
-    document.getElementById('roleInput').value = '';
+    await loadData(); // refresh names/assignments from source of truth
     document.getElementById('personPicker').value = '';
     document.getElementById('newPersonFields').style.display = 'none';
-    document.getElementById('newPersonName').value = '';
     toast('Assigned.');
-    loadAssignments();
+    renderEditPanelList();
   });
 
-  async function loadAssignments() {
-    const { data, error } = await supabase.from('event_staff_assignments')
-      .select('id, role_label, person_id').eq('event_id', currentEventId);
-    const listEl = document.getElementById('rolesList');
-
-    if (error) { listEl.innerHTML = `<div class="error-box">${escapeHtml(error.message)}</div>`; return; }
-    if (!data || data.length === 0) { listEl.innerHTML = '<div class="empty-state">No one assigned yet.</div>'; return; }
-
-    const personIds = [...new Set(data.map(a => a.person_id))];
-    const { data: people } = await supabase.from('event_staff_pool').select('id, name').in('id', personIds);
-    const nameById = Object.fromEntries((people || []).map(p => [p.id, p.name]));
-
-    const byRole = {};
-    for (const a of data) (byRole[a.role_label] ||= []).push(a);
-
-    // Door and Host first if present, then any extra roles alphabetically
-    const roleOrder = Object.keys(byRole).sort((a, b) => {
-      const priority = { Door: 0, Host: 1 };
-      const pa = priority[a] ?? 2, pb = priority[b] ?? 2;
-      return pa !== pb ? pa - pb : a.localeCompare(b);
-    });
-
-    listEl.innerHTML = '';
-    for (const role of roleOrder) {
-      const section = document.createElement('div');
-      section.style.marginBottom = '16px';
-      section.innerHTML = `<div style="font-weight:600; margin-bottom:6px;">${escapeHtml(role)}</div>`;
-      for (const a of byRole[role]) {
-        const row = document.createElement('div');
-        row.className = 'roster-row';
-        row.innerHTML = `<span class="name">${escapeHtml(nameById[a.person_id] || '(unknown)')}</span>`;
-        if (isAdmin) {
-          const removeBtn = document.createElement('button');
-          removeBtn.textContent = 'Remove';
-          removeBtn.className = 'btn-ghost';
-          removeBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
-          removeBtn.addEventListener('click', async () => {
-            const { error } = await supabase.from('event_staff_assignments').delete().eq('id', a.id);
-            if (error) { toast('Could not remove: ' + error.message); return; }
-            loadAssignments();
-          });
-          row.appendChild(removeBtn);
-        }
-        section.appendChild(row);
-      }
-      listEl.appendChild(section);
-    }
-  }
+  loadData();
 </script>
 </body>
 </html>
