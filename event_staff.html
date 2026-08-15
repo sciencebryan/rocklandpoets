@@ -12,16 +12,21 @@
     padding: 8px 10px;
     text-align: left;
     font-size: 0.85rem;
-    white-space: nowrap;
     vertical-align: top;
   }
+  .staff-table td.assign-cell { white-space: nowrap; }
+  .staff-table td.assign-cell.editing { white-space: normal; min-width: 170px; }
   .staff-table th { background: var(--paper); position: sticky; top: 0; z-index: 1; }
   .staff-table th.corner { position: sticky; left: 0; z-index: 2; background: var(--paper); }
-  .staff-table td.event-cell { font-weight: 600; position: sticky; left: 0; background: var(--paper-raised); }
+  .staff-table td.event-cell { font-weight: 600; position: sticky; left: 0; background: var(--paper-raised); white-space: nowrap; }
   .staff-table td.assign-cell { cursor: default; min-width: 90px; }
   .staff-table td.assign-cell.clickable { cursor: pointer; }
   .staff-table td.assign-cell.clickable:hover { background: var(--moss-bg); }
   .staff-table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); max-height: 70vh; overflow-y: auto; }
+  .cell-person-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: 0.8rem; margin-bottom: 2px; }
+  .cell-x-btn { background: none; border: none; color: var(--rust); cursor: pointer; font-size: 0.85rem; padding: 0 2px; min-height: auto; }
+  .cell-select { font-size: 0.8rem; padding: 4px 6px; min-height: auto; width: 100%; margin-top: 4px; }
+  .cell-close-btn { font-size: 0.75rem; color: var(--ink-soft); background: none; border: none; cursor: pointer; padding: 2px 0; margin-top: 4px; min-height: auto; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -44,21 +49,6 @@
   </div>
 
   <button class="btn-secondary" id="loadMoreBtn" style="margin-top:16px;">Load more months</button>
-
-  <div id="editPanel" class="card" style="display:none; margin-top:20px;">
-    <div id="editPanelTitle" style="font-weight:600; margin-bottom:10px;"></div>
-    <div id="editPanelList" style="margin-bottom:12px;"></div>
-    <div id="editPanelAdd" style="display:none;">
-      <select id="personPicker"><option value=""> Choose </option><option value="__new__">+ Add a new person...</option></select>
-      <div id="newPersonFields" style="display:none; margin-top:8px;">
-        <label for="newPersonName">Name</label>
-        <input type="text" id="newPersonName">
-      </div>
-      <div id="assignError" class="error-box" style="display:none;"></div>
-      <button class="btn-primary" id="assignBtn" style="margin-top:12px;">Add</button>
-    </div>
-    <button class="btn-ghost" id="closePanelBtn" style="margin-top:8px;">Close</button>
-  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -99,10 +89,17 @@
 
   let rangeStart = isoDate(addMonths(new Date(), -1));
   let rangeEnd = isoDate(addMonths(new Date(), 6));
-  let extraRoleCols = []; // role labels added this session with no assignments yet
+  let extraRoleCols = [];
   let events = [];
   let assignments = [];
   let nameById = {};
+  let pool = []; // [{id, name}]
+  let editingCell = null; // { eventId, role } or null
+
+  async function loadPool() {
+    const { data } = await supabase.from('event_staff_pool').select('id, name').order('name');
+    pool = data || [];
+  }
 
   async function loadData() {
     const { data: evData } = await supabase.from('events').select('id, event_date, event_type')
@@ -149,21 +146,125 @@
     for (const ev of events) {
       html += `<tr><td class="event-cell">${escapeHtml(ev.event_date)}<br><span class="meta">${TYPE_LABEL[ev.event_type]}</span></td>`;
       for (const role of roles) {
-        const cellAssignments = assignments.filter(a => a.event_id === ev.id && a.role_label === role);
-        const names = cellAssignments.map(a => escapeHtml(nameById[a.person_id] || '?')).join(', ') || '—';
-        const clickable = isAdmin ? 'clickable' : '';
-        html += `<td class="assign-cell ${clickable}" data-event-id="${ev.id}" data-role="${escapeHtml(role)}">${names}</td>`;
+        const isEditing = isAdmin && editingCell && editingCell.eventId === ev.id && editingCell.role === role;
+        const clickable = isAdmin && !isEditing ? 'clickable' : '';
+        const editingClass = isEditing ? 'editing' : '';
+        html += `<td class="assign-cell ${clickable} ${editingClass}" data-event-id="${ev.id}" data-role="${escapeHtml(role)}">`;
+        html += isEditing ? buildEditCellHtml(ev.id, role) : buildDisplayCellHtml(ev.id, role);
+        html += '</td>';
       }
       html += '</tr>';
     }
     html += '</tbody>';
     table.innerHTML = html;
+    wireCellEvents();
+  }
 
-    if (isAdmin) {
-      table.querySelectorAll('td.assign-cell.clickable').forEach(td => {
-        td.addEventListener('click', () => openEditPanel(parseInt(td.dataset.eventId, 10), td.dataset.role));
-      });
+  function buildDisplayCellHtml(eventId, role) {
+    const cellAssignments = assignments.filter(a => a.event_id === eventId && a.role_label === role);
+    return cellAssignments.map(a => escapeHtml(nameById[a.person_id] || '?')).join(', ') || '--';
+  }
+
+  function buildEditCellHtml(eventId, role) {
+    const current = assignments.filter(a => a.event_id === eventId && a.role_label === role);
+    let html = '';
+    for (const a of current) {
+      html += `<div class="cell-person-row"><span>${escapeHtml(nameById[a.person_id] || '?')}</span>
+        <button class="cell-x-btn" data-remove-id="${a.id}" title="Remove">✕</button></div>`;
     }
+    if (current.length === 0) html += `<div class="meta" style="font-size:0.75rem;">No one yet</div>`;
+
+    if (current.length < MAX_PER_ROLE) {
+      html += `<select class="cell-select" data-add-select="1">
+        <option value="">+ Add person…</option>`;
+      for (const p of pool) html += `<option value="${p.id}">${escapeHtml(p.name)}</option>`;
+      html += `<option value="__new__">+ New person…</option></select>`;
+      html += `<div data-new-person-fields style="display:none; margin-top:4px;">
+        <input type="text" class="cell-select" data-new-person-name placeholder="Name" style="min-height:auto; padding:6px;">
+        <button class="btn-secondary" data-new-person-confirm style="width:100%; padding:6px; font-size:0.78rem; margin-top:4px;">Add</button>
+      </div>`;
+    }
+    html += `<button class="cell-close-btn" data-close-cell="1">Close</button>`;
+    return html;
+  }
+
+  function wireCellEvents() {
+    if (!isAdmin) return;
+
+    document.querySelectorAll('td.assign-cell.clickable').forEach(td => {
+      td.addEventListener('click', () => {
+        editingCell = { eventId: parseInt(td.dataset.eventId, 10), role: td.dataset.role };
+        renderTable();
+      });
+    });
+
+    document.querySelectorAll('td.assign-cell.editing').forEach(td => {
+      const eventId = parseInt(td.dataset.eventId, 10);
+      const role = td.dataset.role;
+
+      td.querySelectorAll('[data-remove-id]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const { error } = await supabase.from('event_staff_assignments').delete().eq('id', parseInt(btn.dataset.removeId, 10));
+          if (error) { toast('Could not remove: ' + error.message); return; }
+          assignments = assignments.filter(a => a.id !== parseInt(btn.dataset.removeId, 10));
+          renderTable();
+        });
+      });
+
+      const closeBtn = td.querySelector('[data-close-cell]');
+      if (closeBtn) closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        editingCell = null;
+        renderTable();
+      });
+
+      const select = td.querySelector('[data-add-select]');
+      if (select) select.addEventListener('click', (e) => e.stopPropagation());
+      if (select) select.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const val = select.value;
+        if (val === '__new__') {
+          td.querySelector('[data-new-person-fields]').style.display = 'block';
+          return;
+        }
+        if (!val) return;
+        await assignPerson(eventId, role, parseInt(val, 10));
+      });
+
+      const confirmBtn = td.querySelector('[data-new-person-confirm]');
+      if (confirmBtn) confirmBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const nameInput = td.querySelector('[data-new-person-name]');
+        const name = nameInput.value.trim();
+        if (!name) { toast('Name is required.'); return; }
+        const { data, error } = await supabase.from('event_staff_pool').insert({ name }).select().single();
+        if (error) { toast('Could not add person: ' + error.message); return; }
+        await loadPool();
+        await assignPerson(eventId, role, data.id);
+      });
+
+      td.addEventListener('click', (e) => e.stopPropagation());
+    });
+  }
+
+  async function assignPerson(eventId, role, personId) {
+    const { error } = await supabase.from('event_staff_assignments').insert({
+      event_id: eventId, role_label: role, person_id: personId,
+    });
+    if (error) {
+      toast(error.code === '23505' ? 'That person is already assigned to this role.' : 'Could not assign: ' + error.message);
+      return;
+    }
+    const { data: newRow } = await supabase.from('event_staff_assignments')
+      .select('id, event_id, role_label, person_id').eq('event_id', eventId).eq('role_label', role).eq('person_id', personId).single();
+    if (newRow) assignments.push(newRow);
+    if (!nameById[personId]) {
+      const found = pool.find(p => p.id === personId);
+      if (found) nameById[personId] = found.name;
+    }
+    toast('Assigned.');
+    renderTable();
   }
 
   document.getElementById('loadMoreBtn').addEventListener('click', () => {
@@ -180,111 +281,8 @@
     renderTable();
   });
 
-  // ---- Edit panel ----
-  let editingEventId = null, editingRole = null;
-
-  async function loadPersonPicker() {
-    const { data } = await supabase.from('event_staff_pool').select('id, name').order('name');
-    const sel = document.getElementById('personPicker');
-    sel.innerHTML = '<option value="">— Choose —</option>';
-    for (const p of data || []) {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      sel.appendChild(opt);
-    }
-    const newOpt = document.createElement('option');
-    newOpt.value = '__new__';
-    newOpt.textContent = '+ Add a new person…';
-    sel.appendChild(newOpt);
-  }
-
-  document.getElementById('personPicker').addEventListener('change', (e) => {
-    document.getElementById('newPersonFields').style.display = e.target.value === '__new__' ? 'block' : 'none';
-  });
-
-  async function openEditPanel(eventId, role) {
-    editingEventId = eventId;
-    editingRole = role;
-    const ev = events.find(e => e.id === eventId);
-    document.getElementById('editPanelTitle').textContent = `${role} — ${ev.event_date} (${TYPE_LABEL[ev.event_type]})`;
-
-    await loadPersonPicker();
-    renderEditPanelList();
-    document.getElementById('editPanel').style.display = 'block';
-    document.getElementById('editPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  function renderEditPanelList() {
-    const current = assignments.filter(a => a.event_id === editingEventId && a.role_label === editingRole);
-    const listEl = document.getElementById('editPanelList');
-    listEl.innerHTML = '';
-    if (current.length === 0) {
-      listEl.innerHTML = '<div class="empty-state">No one assigned yet.</div>';
-    }
-    for (const a of current) {
-      const row = document.createElement('div');
-      row.className = 'roster-row';
-      row.innerHTML = `<span class="name">${escapeHtml(nameById[a.person_id] || '(unknown)')}</span>`;
-      const removeBtn = document.createElement('button');
-      removeBtn.textContent = 'Remove';
-      removeBtn.className = 'btn-ghost';
-      removeBtn.style.cssText = 'padding:4px 8px; min-height:auto; font-size:0.78rem; color:var(--rust);';
-      removeBtn.addEventListener('click', async () => {
-        const { error } = await supabase.from('event_staff_assignments').delete().eq('id', a.id);
-        if (error) { toast('Could not remove: ' + error.message); return; }
-        assignments = assignments.filter(x => x.id !== a.id);
-        renderEditPanelList();
-        renderTable();
-      });
-      row.appendChild(removeBtn);
-      listEl.appendChild(row);
-    }
-    document.getElementById('editPanelAdd').style.display = current.length < MAX_PER_ROLE ? 'block' : 'none';
-  }
-
-  document.getElementById('closePanelBtn').addEventListener('click', () => {
-    document.getElementById('editPanel').style.display = 'none';
-    document.getElementById('personPicker').value = '';
-    document.getElementById('newPersonFields').style.display = 'none';
-    document.getElementById('assignError').style.display = 'none';
-  });
-
-  async function resolvePersonId() {
-    const picked = document.getElementById('personPicker').value;
-    if (!picked) return undefined;
-    if (picked !== '__new__') return parseInt(picked, 10);
-    const name = document.getElementById('newPersonName').value.trim();
-    if (!name) { toast('Name is required to add a new person.'); return undefined; }
-    const { data, error } = await supabase.from('event_staff_pool').insert({ name }).select().single();
-    if (error) { toast('Could not add person: ' + error.message); return undefined; }
-    return data.id;
-  }
-
-  document.getElementById('assignBtn').addEventListener('click', async () => {
-    const errEl = document.getElementById('assignError');
-    errEl.style.display = 'none';
-
-    const personId = await resolvePersonId();
-    if (personId === undefined) return;
-
-    const { error } = await supabase.from('event_staff_assignments').insert({
-      event_id: editingEventId, role_label: editingRole, person_id: personId,
-    });
-    if (error) {
-      errEl.textContent = error.code === '23505' ? 'That person is already assigned to this role.' : 'Could not assign: ' + error.message;
-      errEl.style.display = 'block';
-      return;
-    }
-
-    await loadData(); // refresh names/assignments from source of truth
-    document.getElementById('personPicker').value = '';
-    document.getElementById('newPersonFields').style.display = 'none';
-    toast('Assigned.');
-    renderEditPanelList();
-  });
-
-  loadData();
+  if (isAdmin) await loadPool();
+  await loadData();
 </script>
 </body>
 </html>
