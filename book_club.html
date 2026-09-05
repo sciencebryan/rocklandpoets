@@ -147,6 +147,10 @@
 
     currentEl.appendChild(bookCard(current, true, focusPoemsBySelection[current.id]));
 
+    for (const b of upcoming.slice(1)) {
+      currentEl.appendChild(bookCard(b, false, focusPoemsBySelection[b.id]));
+    }
+    
     const rest = data.filter(b => b.meeting_date < today);
     if (rest.length === 0) {
       historyEl.innerHTML = '<div class="empty-state">No past books yet.</div>';
