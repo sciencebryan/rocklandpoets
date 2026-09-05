@@ -142,12 +142,12 @@
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const upcoming = data.filter(b => b.meeting_date >= today).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date))[0];
-    const current = upcoming || data[0];
+    const upcoming = data.filter(b => b.meeting_date >= today).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date));
+    const current = upcoming[0] || data[0];
 
     currentEl.appendChild(bookCard(current, true, focusPoemsBySelection[current.id]));
 
-    const rest = data.filter(b => b.id !== current.id);
+    const rest = data.filter(b => b.meeting_date < today);
     if (rest.length === 0) {
       historyEl.innerHTML = '<div class="empty-state">No past books yet.</div>';
     } else {
