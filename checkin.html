@@ -337,6 +337,7 @@
       .from('attendee_display')
       .select('id, display_name')
       .ilike('display_name', `%${q}%`)
+      .order('display_name')
       .limit(50);
 
     if (error) { toast('Search error: ' + error.message); return; }
