@@ -1,0 +1,940 @@
+  
+<div id="user-dot" style="
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background-color: #007bff;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+    z-index: 10;
+  "></div>
+
+<div class="dashboard-container">
+
+  <div class="map-wrapper">
+    <img src="dodgemap2026.png" alt="Dodge Map" id="map-image">
+ 
+
+  <svg class="map-svg" viewBox="0 0 521 711" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+    <rect 
+      id="key1" 
+      x="6" 
+      y="386" 
+      width="120" 
+      height="59" 
+      class="map-target" 
+      onclick="highlightTarget('njpac')" 
+    />
+    <rect 
+      id="key2" 
+      x="4" 
+      y="447" 
+      width="123" 
+      height="29" 
+      class="map-target" 
+      onclick="highlightTarget('chambers')" 
+    />
+    <rect 
+      id="key3" 
+      x="5" 
+      y="482" 
+      width="164" 
+      height="36" 
+      class="map-target" 
+      onclick="highlightTarget('treat')" 
+    />
+    <rect 
+      id="key4" 
+      x="6" 
+      y="524" 
+      width="160" 
+      height="29" 
+      class="map-target" 
+      onclick="highlightTarget('historical')" 
+    />
+    <rect 
+      id="key5" 
+      x="9" 
+      y="555" 
+      width="154" 
+      height="28" 
+      class="map-target" 
+      onclick="highlightTarget('trinity')" 
+    />
+    <rect 
+      id="key6" 
+      x="9" 
+      y="588" 
+      width="150" 
+      height="40" 
+      class="map-target" 
+      onclick="highlightTarget('express')" 
+    />
+    <rect 
+      id="key7" 
+      x="9" 
+      y="633" 
+      width="148" 
+      height="37" 
+      class="map-target" 
+      onclick="highlightTarget('baptist')" 
+    />
+    <rect 
+      id="key8" 
+      x="9" 
+      y="670" 
+      width="150" 
+      height="34" 
+      class="map-target" 
+      onclick="highlightTarget('library')" 
+    />
+    
+    <polygon 
+      id="njpac" 
+      points="337,377 375,361 411,361 424,374 425,424 395,418 358,417" 
+      class="map-target" 
+    />
+    <polygon 
+      id="chambers" 
+      points="401,448 359,419 397,420 423,428" 
+      class="map-target" 
+    />
+    <polygon 
+      id="treat" 
+      points="306,473 335,492 347,480 313,461" 
+      class="map-target" 
+    />
+    <polygon 
+      id="historical" 
+      points="293,488 318,505 326,488 302,473" 
+      class="map-target" 
+    />
+    <polygon 
+      id="trinity" 
+      points="276,384 297,389 310,368 295,356 281,362" 
+      class="map-target" 
+    />
+    <polygon 
+      id="express" 
+      points="195,360 255,379 262,357 202,337" 
+      class="map-target" 
+    />
+    <polygon 
+      id="baptist" 
+      points="301,296 296,260 329,256 333,285" 
+      class="map-target" 
+    />
+    <polygon 
+      id="library" 
+      points="167,89 208,102 223,82 180,58" 
+      class="map-target" 
+    />
+
+
+
+
+  </svg>
+</div>
+
+<div class="sessions-column">
+  <div class="sessions-header">
+    <div class="tabs">
+      <span id="tab-current" class="tab active" onclick="switchTab('current')">Current Sessions</span>
+      <span class="divider">|</span>
+      <span id="tab-all" class="tab" onclick="switchTab('all')">All Sessions</span>
+    </div>
+    
+    <div id="filter-banner" class="filter-banner" style="display: none;">
+      <span id="filter-text">Filtered by location</span>
+      <button class="clear-filter-btn" onclick="clearLocationFilter()" title="Clear Filter">✕</button>
+    </div>
+  </div>
+
+  <div id="sessions-list"></div>
+</div>
+</div>
+
+
+<style>
+  .map-target {
+    fill: transparent;
+    stroke: transparent;
+    stroke-width: 0;
+    cursor: pointer;
+    transition: fill 0.2s ease, stroke 0.2s ease;
+  }
+  .highlighted {
+	animation: flashfade 1.5s ease-out forwards;
+        animation-iteration-count: 3; 
+  }
+  @keyframes flashfade {
+    0% {
+      fill: rgba(255,235,59,0.8);
+    }
+    20% {
+      fill: rgba(255,235,59,0.8);
+    }
+    100% {
+      fill: transparent;
+    }
+  }
+
+ .dashboard-container {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      align-items: flex-start;
+      font-family: Arial, sans-serif;
+   }
+ .map-wrapper {
+      position: relative;
+      flex: 1 1 auto;
+      height: auto;
+      max-width: 521px;
+      width: 100%;
+  }
+
+.map-wrapper img {
+      width: 100%;
+      height: auto;
+      display: block;
+  }
+
+  .map-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+   .sessions-column {
+      flex: 1 1 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 600px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+
+   .session-card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fdfdfd;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+   .session-card:hover {
+      background: #f0f7ff;
+    }
+
+  .session-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      
+    }
+.sessions-header {
+  margin-bottom: 12px;
+}
+
+.tabs {
+  font-size: 1.1rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab {
+  cursor: pointer;
+  color: #777;
+  transition: color 0.2s;
+}
+
+.tab.active {
+  color: #000;
+  border-bottom: 2px solid #007bff;
+}
+
+.divider {
+  color: #ccc;
+  font-weight: normal;
+}
+
+/* Filter Banner */
+.filter-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #e9f5ff;
+  border: 1px solid #b6e0fe;
+  color: #004085;
+  padding: 6px 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+.clear-filter-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #004085;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.clear-filter-btn:hover {
+  color: #ff0000;
+}
+    .session-title {
+      font-weight: bold;
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+    }
+
+    .session-time {
+      font-size: 0.8rem;
+      color: #666;
+    }
+
+    .toggle-btn {
+      background: none;
+      border: none;
+      font-size: 0.8rem;
+      cursor: pointer;
+      padding: 4px;
+      color: #555;
+    }
+
+   .session-description {
+      display: none;
+      padding: 0 16px 12px 16px;
+      font-size: 0.85rem;
+      color: #444;
+      border-top: 1px solid #eee;
+      margin-top: 8px;
+    }
+  
+    .session-card.expanded .session-description {
+      display: block;
+    }
+
+</style>
+
+<script>
+
+
+  const MAP_BOUNDS = {
+    north: 40.74570, // Top latitude
+    south: 40.73566, // Bottom latitude
+    west: -74.17456, // Left longitude
+    east: -74.16475  // Right longitude
+  };
+
+  const mapImage = document.getElementById('map-image');
+  const userDot = document.getElementById('user-dot');
+  
+  function updateMarkerPosition(lat, lng) {
+    const xPct = ((lng - MAP_BOUNDS.west) / (MAP_BOUNDS.east - MAP_BOUNDS.west)) * 100;    
+    const yPct = ((MAP_BOUNDS.north - lat) / (MAP_BOUNDS.north - MAP_BOUNDS.south)) * 100;
+
+    if (xPct >= 0 && xPct <= 100 && yPct >= 0 && yPct <= 100) {
+      userDot.style.left = `${xPct}%`;
+      userDot.style.top = `${yPct}%`;
+      userDot.style.display = 'block';
+    } else {
+      userDot.style.display = 'none';
+    }
+  }
+
+  if ('geolocation' in navigator) {
+    navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        updateMarkerPosition(latitude, longitude);
+      },
+      (error) => {
+        console.error("GPS Error:", error.message);
+      },
+      {
+        enableHighAccuracy: true, // Uses hardware GPS if available
+        maximumAge: 1000,
+        timeout: 5000
+      }
+    );
+  } 
+
+  function highlightTarget(targetId) {
+   const target = document.getElementById(targetId);
+   if (!target) return; 
+
+   document.querySelectorAll('.map-target').forEach(el => el.classList.remove('highlighted'));
+       
+   if (target) {
+      target.classList.add('highlighted');
+   }
+
+   target.addEventListener('animationend', () => {
+    target.classList.remove('highlighted');
+  }, { once: true });
+
+  }
+
+const SESSIONS = [
+{
+id: "s1",
+title: "Praise & Reclamation: Meg Day, Tongo Eisen-Martin, Rickey Laurentiis, Rajiv Mohabir, Naomi Shihab Nye, José Olivarez, and Danez Smith",
+targetId: "njpac",
+startTime: "9:30",
+endTime: "10:40",
+description: "Kick off the last, and most awe-inspiring day of the festival, with a dynamic reading by powerful voices lifting up their poems in gratitude and in praise of their roots, bodies and communities. This is an opportunity for festival attendees to gather in community with each other, open their day with rejoice and music, and break bread together in the form of poetry. Don’t miss this very special festival experience.",
+location: "NJPAC Victoria Theater",
+type: ""
+},
+{
+id: "s3",
+title: "The Future is Female: Elizabeth Acevedo, Diamond Forde, Aja Monet, and Patricia Smith",
+targetId: "njpac",
+startTime: "11:00",
+endTime: "12:10",
+description: "Fierce female power takes the stage! Trailblazers reflect on their successes and the challenges that remain in forging new paths in academic, young adult and other genres of writing. Experience a riveting conversation that celebrates the legacy of pioneering female writers and defines our hopes and dreams for a more equitable future.",
+location: "NJPAC Victoria Theater",
+type: ""
+},
+{
+id: "s4",
+title: "Writing Workshop: Alysha Wise",
+targetId: "njpac",
+startTime: "11:00",
+endTime: "12:10",
+description: "Break through the writer’s block with thought-provoking prompts in a hands-on workshop led by festival poets. Space is first-come, first-served. Please be prepared with a pen and paper; arrive promptly and plan to stay for the full 70 minutes.",
+location: "NJPAC Parsonnet Room",
+type: ""
+},
+{
+id: "s5",
+title: "Transient Worlds: Poetry & Translation: Carol Moldaw, Arthur Sze, and Michael Wiegers",
+targetId: "treat",
+startTime: "11:00",
+endTime: "12:10",
+description: "At the start of his latest book, 2025 – 26 U.S. Poet Laureate Arthur Sze asks the question “How can we deepen our understanding of poetry?” Drawing upon multiple methods of translation across over a dozen different languages, Sze invites readers — and poets — to expand upon their consideration of the shared, universal language that is poetry. Sze will be joined by the poet and translator, Carol Moldaw and Copper Canyon Press editor and translator, Michael Wiegers, for a reading of original poems and poems in English translation from Chinese, Russian, Tzeltal and Spanish, followed by a conversation about translation as a catalyst for the art of poetry.",
+location: "Robert Treat Hotel-Pennsylvania Room",
+type: ""
+},
+{
+id: "s6",
+title: "The Body, a Love Song: Claudia Cortese, Mckendy Fils-Aimé, Terrance Hayes, and Julian Randall",
+targetId: "treat",
+startTime: "11:00",
+endTime: "12:10",	
+description: "We invite you to celebrate all the ways our bodies are both strong and vulnerable. This session is an opportunity to praise our bodies, their functionalities and frailties, and acknowledge all the ways in which we are connected in spite of our bodies’ differences.",
+location: "Robert Treat Hotel -New Jersey Room",
+type: ""
+},
+{
+id: "s7",
+title: "Historical Legend & Poetry: Tyehimba Jess, E. Ethelbert Miller, and Frank X Walker",
+targetId: "trinity",
+startTime: "11:00",
+endTime: "12:10",
+description: "Poetry can bring figures from the past — both the historically documented and the purely legendary — back to life. Three poets whose work brings us face-toface with ancestors and imaginary antecedents, from blues musicians to “Affrilachian” pioneers, talk about writing their way into earlier times.",
+location: "Trinity & St. Philip’s Cathedral",
+type: ""
+},
+{
+id: "s8",
+title: "Finding Our Ancestors in the Stars: Mayda del Valle, Chanda Prescod-Weinstein, Gabriel Ramirez, and Evie Shockley",
+targetId: "baptist",
+startTime: "11:00",
+endTime: "12:10",
+description: "Why do we look to both the skies and our ancestors for guidance and inspiration? What threads connect ancient wisdom, cosmology and poetry? Poets with stars in their eyes talk about the insights they’ve found by looking back — and looking up.",
+location: "First Baptist Peddie Memorial Church",
+type: ""
+},
+{
+id: "s9",
+title: "Dodge Poetry Youth Anthology Release (featuring Ms. Betty Neals and Darius Parker)",
+targetId: "library",
+startTime: "11:00",
+endTime: "13:00",
+description: "Young artists showcase their poems, generated through a series of workshops leading up to the Dodge Poetry Festival. In partnership with Newark community organizations, NJPAC produces these workshops, which offer the city’s young people the chance to be guided by experienced mentor poets and Rutgers – Newark MFA students to craft poems that reflect their own lives and experiences. Prepare for powerful poems emphasizing themes of identity, self-expression and social justice",
+location: "Newark Public Library",
+type: ""
+},
+{
+id: "s10",
+title: "Festival Open Mic",
+targetId: "historical",
+startTime: "11:00",
+endTime: "12:10",
+description: "Read your poetry in front of other festival goers — whether it’s your first or 50th time at an open mic! Share your work in our supportive community by bringing one poem (no longer than three minutes) to read aloud.",
+location: "New Jersey Historical Society",
+type: ""
+},
+{
+id: "s11",
+title: "Cave Canem’s 30th Anniversary",
+targetId: "njpac",
+startTime: "12:30",
+endTime: "13:40",
+description: "Cave Canem is celebrating its 30th birthday through June 2027. Join us for an anniversary reading, featuring a stellar lineup of Cave Canem Fellows: Hayes Davis, Major Jackson, Suzanne Jackson and Valerie Jean. Cave Canem is a nonprofit organization, committed to cultivating the artistic and professional growth of Black poets.",
+location: "NJPAC Victoria Theater",
+type: ""
+},
+{
+id: "s12",
+title: "Writing Workshop: Amanda Johnston",
+targetId: "njpac",
+startTime: "12:30",
+endTime: "13:40",
+description: "Break through the writer’s block with thought-provoking prompts in a hands-on workshop led by festival poets. Space is first-come, firstserved. Please be prepared with a pen and paper; arrive promptly and plan to stay for the full 70 minutes.",
+location: "NJPAC Parsonnet Room",
+type: ""
+},
+{
+id: "s13",
+title: "When Memory Speaks: A Dodge Poetry Festival Reading with CantoMundo: Jay Aja, María Fernanda Chamorro, and Noel Quiñones",
+targetId: "baptist",
+startTime: "12:30",
+endTime: "13:40",
+description: "How does memory serve as both an anchor and a bridge in poetry? In what ways do our verses allow us to celebrate the living, honor those we’ve lost, and reclaim the stories that define us? Join CantoMundo for a compelling reading featuring poets Jay Aja, María Fernanda Chamorro and Noel Quiñones. Through works grounded in remembrance and storytelling, these poets explore how memory can help us navigate grief and preserve history. CantoMundo is a national poetry organization that cultivates a community of Latinx poets through workshops, symposia, public readings and publications.",
+location: "First Baptist Peddie Memorial Church",
+type: ""
+},
+{
+id: "s14",
+title: "Queering the Poem: Marina Carreira, Noah Arhm Choi, Rickey Laurentiis, and Leslie McIntosh",
+targetId: "treat",
+startTime: "12:30",
+endTime: "13:40",
+description: "Authenticity lives in the gray and muddy realms where answers aren’t black and white. Queering a poem, or venturing into the beauty of the non-binary, can offer up poems where an “answer” to a question is best expressed as an unknown. Some of our most interesting work challenges readers to lean into the unanswerable. Join us as we explore the blurred boundaries of gender, sexuality, love and identity",
+location: "Robert Treat Hotel -New Jersey Room",
+type: ""
+},
+{
+id: "s15",
+title: "Writing Radical Joy: Stephanie Burt, Malcolm Friend, José Olivarez, and Glenis Redmond",
+targetId: "trinity",
+startTime: "12:30",
+endTime: "13:40",
+description: "Poetry can be a way to process trauma; it can also be a vehicle for practicing radical joy. Hear from poets who use verses to amplify the power of celebrations, triumphs, laughter and delight to combat oppression. Harnessing praise, humor, defiance and ecstasy to challenge established systems and monolithic cultural norms is one of poetry’s superpowers. Join us to revel in the power of joy and its liberating impact on our communities.",
+location: "Trinity & St. Philip’s Cathedral",
+type: ""
+},
+{
+id: "s16",
+title: "Writing Our Land: Dr. Grisel Y. Acosta, Sarah Browning, Anthony Cody, Jessica Jacobs, and Peter E. Murphy",
+targetId: "treat",
+startTime: "12:30",
+endTime: "13:40",
+description: "From Appalachian mountains to indigenous lands, poetry allows us to visit all kinds of landscapes and understand why protecting our land is important. Through a reading and conversation, poets from different locations will talk about capturing the spirit of a place, advocating for environmental justice and utilizing poetry to preserve the places that care for us and shape us.",
+location: "Robert Treat Hotel-Pennsylvania Room",
+type: ""
+},
+{
+id: "s17",
+title: "Mental Wellness & Poetry: Len Lawson, walela Nehanda, Cindy Juyoung Ok, and Leah Lakshmi Piepzna-Samarasinha",
+targetId: "express",
+startTime: "12:30",
+endTime: "13:40",
+description: "Writing into difficult topics — trauma, grief and mental health — takes skill and care. This session explores how poets can write sensitively about challenging subjects while protecting their mental well-being on and off the page.",
+location: "Express Newark (Lecture Hall)",
+type: ""
+},
+{
+id: "s18",
+title: "Festival Open Mic",
+targetId: "historical",
+startTime: "12:30",
+endTime: "13:40",
+description: "Read your poetry in front of other festival goers — whether it’s your first or 50th time at an open mic! Share your work in our supportive community by bringing one poem (no longer than three minutes) to read aloud.",
+location: "New Jersey Historical Society",
+type: ""
+},
+{
+id: "s19",
+title: "Writing Workshop: Brent Ameneyro",
+targetId: "njpac",
+startTime: "14:00",
+endTime: "15:10",
+description: "Break through the writer’s block with thought-provoking prompts in a hands-on workshop led by festival poets. Space is first-come, first-served. Please be prepared with a pen and paper; arrive promptly and plan to stay for the full 70 minutes.",
+location: "NJPAC Parsonnet Room",
+type: ""
+},
+{
+id: "s20",
+title: "Diaspora and Liberation: A Dodge Poetry Festival Reading with Lampblack Lit: Attorious Renée Augustin, Kailah Hodge, and Mya Matteo Alexice",
+targetId: "treat",
+startTime: "14:00",
+endTime: "15:10",
+description: "This reading features poets whose work explores resilience, connection and the ongoing reclamation of the Black narrative. Lampblack is dedicated to advancing Black literature through direct aid to writers and publishing voices from the Black diaspora.",
+location: "Robert Treat Hotel-Pennsylvania Room",
+type: ""
+},
+{
+id: "s21",
+title: "Embodied Connection: A Dodge Poetry Festival Reading with Kundiman: Fatimah Asghar, Sanam Sheriff, R. A. Villanueva",
+targetId: "treat",
+startTime: "14:00",
+endTime: "15:10",
+description: "Writing about connections with others can aid in the navigation of today’s social and political structures. Consider how the poetics of kinship can inform, or transform, an understanding of community with poets whose works explore embodiment, presence and connection. Kundiman is a national nonprofit organization dedicated to nurturing generations of writers and readers of Asian American literature.",
+location: "Robert Treat Hotel -New Jersey Room",
+type: ""
+},
+{
+id: "s22",
+title: "Poetry as Time Capsule: Dena Igusti, Adrian Matejka, Danez Smith, and Frank X Walker",
+targetId: "express",
+startTime: "14:00",
+endTime: "15:10",
+description: "Poets have long served as de facto historians — documenting crises, genocides and the shifting state of politics in ways that reveal far more than textbooks ever could. What elements of the past are best preserved through poetry — and what are the limits to artistic expression as reportage? How can narratives from vulnerable communities be documented in a way that elevates truth, morality and thoughtfulness?",
+location: "Express Newark (Lecture Hall)",
+type: ""
+},
+{
+id: "s23",
+title: "Griots, Troubadours and MCs: Poetry and the Oral Tradition: Mayda del Valle, Tyehimba Jess, Marc Bamuthi Joseph, Patricia Smith, and Alysha Wise",
+targetId: "trinity",
+startTime: "14:00",
+endTime: "15:10",
+description: "For thousands of years before the invention of the printing press, people created poetry meant to be performed. From the areito performances of the indigenous tribes of the Caribbean and the griots of Western Africa, to modern day slammers and MCs, the spoken word has been central to poetry’s vitality, proving that poetry has always been meant to be recited, performed and sung! In these sessions, poets are invited to perform works that celebrate the oral/aural wonders of poetry.",
+location: "Trinity & St. Philip’s Cathedral",
+type: ""
+},
+{
+id: "s24",
+title: "Developing a Lexicon Toward Liberation: Meg Day, Rajiv Mohabir, Noel Quiñones, and Evie Shockley",
+targetId: "baptist",
+startTime: "14:00",
+endTime: "15:10",
+description: "How can experimenting on the page give voice to shared struggle and triumph? Hear from poets who examine how creators from marginalized and vulnerable communities push the boundaries of language to express what standard forms cannot. Discover how these poets have wielded their pen to invent unique poetic lexicons, transform translation into an act of reclamation, and use visual and structural play on the page as a tool for liberation.",
+location: "First Baptist Peddie Memorial Church",
+type: ""
+},
+{
+id: "s25",
+title: "Festival Open Mic",
+targetId: "historical",
+startTime: "14:00",
+endTime: "15:10",
+description: "Read your poetry in front of other festival goers — whether it’s your first or 50th time at an open mic! Share your work in our supportive community by bringing one poem (no longer than three minutes) to read aloud.",
+location: "New Jersey Historical Society",
+type: ""
+},
+{
+id: "s26",
+title: "Writing Workshop: Barbara Fant",
+targetId: "njpac",
+startTime: "15:30",
+endTime: "16:40",
+description: "Break through the writer’s block with thought-provoking prompts in a hands-on workshop led by festival poets. Space is first-come, firstserved. Please be prepared with a pen and paper; arrive promptly and plan to stay for the full 70 minutes.",
+location: "NJPAC Parsonnet Room",
+type: ""
+},
+{
+id: "s27",
+title: "The Fusion of Form & Feeling: Quenton Baker, Terrance Hayes, Amanda Johnston, and E. Ethelbert Miller",
+targetId: "treat",
+startTime: "15:30",
+endTime: "16:40",
+description: "Finding the right form, or container for a poem is part of the creative process, shaping its movement and expression. But can a poem’s form do more than hold it together and deepen the feelings within? How can a poet double down on the emotion and energy a poem carries through the use of form?",
+location: "Robert Treat Hotel-Pennsylvania Room",
+type: ""
+},
+{
+id: "s28",
+title: "Writing Our Story, Preventing Erasure: Tongo Eisen-Martin, Nick Martino, Carol Moldaw, and Leah Lakshmi Piepzna-Samarasinha",
+targetId: "treat",
+startTime: "15:30",
+endTime: "16:40",
+description: "How do we preserve and lift up narratives that history has nearly forgotten? Or excavate stories that have been suppressed and ignored? Poets from a range of backgrounds discuss the importance of telling our communities’ stories — ensuring truths are preserved in the historical record by way of poetry.",
+location: "Robert Treat Hotel -New Jersey Room",
+type: ""
+},
+{
+id: "s29",
+title: "Saying What We Must: Ana Portnoy Brimmer, Roberto Carlos Garcia, and Naomi Shihab Nye",
+targetId: "trinity",
+startTime: "15:30",
+endTime: "16:40",
+description: "We say poets are brave, but is self-expression truly a choice? Or is it demanded of the artist to write on critical topics — politics, identity, race — when a community is in crisis? When does wielding the pen shift from choice to responsibility, and are there limits to a poet’s activism? The conversation will also explore the role of self-care in a writer’s life.",
+location: "Trinity & St. Philip’s Cathedral",
+type: ""
+},
+{
+id: "s30",
+title: "Poetry & Survival: Antoinette Ellis-Williams, Jive Poetic, Julian Randall, and Melida Rodas",
+targetId: "baptist",
+startTime: "15:30",
+endTime: "16:40",
+description: "How do we use poetry as a tool to heal and survive? Where is the line between poetry used as a therapeutic means versus a work of art? And how do we write our story with nuance so that it is both therapeutic and well-crafted? These poets discuss the poems they needed to write to survive and how they knew when it was time to put down the pen.",
+location: "First Baptist Peddie Memorial Church",
+type: ""
+},
+{
+id: "s31",
+title: "Poetry Foundation presents the 2026 Ruth Lilly and Dorothy Sargent Rosenberg Poetry Fellows: xochi quetzali cartland, Fatima Jafar, Shaina Jones, Noel Munguia-Moreno, and Tariq Thompson",
+targetId: "express",
+startTime: "15:30",
+endTime: "16:40",
+description: "The Poetry Foundation presents the first public group reading of the 2026 Ruth Lilly and Dorothy Sargent Rosenberg Fellows. The annual fellowship, awarded since 1989, honors outstanding young poets for their current and potential future contributions to poetry. Located in Chicago, Illinois, the Poetry Foundation publishes Poetry magazine, hosts free poetry events, provides grants to nonprofit organizations with a core commitment to poetry and the literary arts and more in service of amplifying poetry and celebrating poets.",
+location: "Express Newark (Lecture Hall)",
+type: ""
+},
+{
+id: "s32",
+title: "Festival Open Mic",
+targetId: "historical",
+startTime: "15:30",
+endTime: "16:40",
+description: "Read your poetry in front of other festival goers — whether it’s your first or 50th time at an open mic! Share your work in our supportive community by bringing one poem (no longer than three minutes) to read aloud.",
+location: "New Jersey Historical Society",
+type: ""
+},
+{
+id: "s33",
+title: "Community Catalyst Stage: DJ Drewski",
+targetId: "chambers",
+startTime: "11:00",
+endTime: "11:30",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s34",
+title: "Community Catalyst Stage: paulA neves, I. Buenaventura, Theta Pavis",
+targetId: "chambers",
+startTime: "11:30",
+endTime: "12:00",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s35",
+title: "Community Catalyst Stage: M.P. Carver, Craig Bradley, Rev. Bowie Snodgrass",
+targetId: "chambers",
+startTime: "12:00",
+endTime: "12:30",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s36",
+title: "Community Catalyst Stage: Sarah N. Mess, Edward Vidaurre",
+targetId: "chambers",
+startTime: "12:30",
+endTime: "13:00",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s37",
+title: "Community Catalyst Stage: Drag Storytelling with Harmonica Sunbeam and Sitanya",
+targetId: "chambers",
+startTime: "13:00",
+endTime: "13:30",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s38",
+title: "Community Catalyst Stage: Matthew Marroquín, Vanessa Chica",
+targetId: "chambers",
+startTime: "13:30",
+endTime: "14:00",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s39",
+title: "Community Catalyst Stage: Hugo dos Santos, Leah Umansky, Robert Hylton",
+targetId: "chambers",
+startTime: "14:00",
+endTime: "14:30",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s40",
+title: "Community Catalyst Stage: Anyrah Shavéh, Toma Zbrizher, KP Ultra",
+targetId: "chambers",
+startTime: "14:30",
+endTime: "15:00",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s41",
+title: "Community Catalyst Stage: Jeff Dess, John Wojtowicz, Tiriq Rashad",
+targetId: "chambers",
+startTime: "15:00",
+endTime: "15:30",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+},
+{
+id: "s42",
+title: "Community Catalyst Stage: Nicola Alexander-Bohrer, LadiiAmethyst",
+targetId: "chambers",
+startTime: "15:30",
+endTime: "16:00",
+description: "Readings and performances",
+location: "Chambers Plaza",
+type: ""
+}
+
+
+
+
+  ];
+
+  function isCurrentSession(startTime, endTime) {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  }
+
+  let activeTab = 'current';    
+  let selectedTargetId = null;
+
+  function renderSessions() {
+    const container = document.getElementById('sessions-list');
+
+    container.innerHTML = '';
+
+    let filtered = SESSIONS;
+    if (activeTab === 'current') {
+      filtered = filtered.filter(s => isCurrentSession(s.startTime, s.endTime));
+    }
+
+    if (selectedTargetId) {
+      filtered = filtered.filter(s => s.targetId === selectedTargetId);
+    }
+
+    if (filtered.length === 0) {
+      const message = selectedTargetId 
+        ? "No sessions found at this location for the selected view." 
+        : "No active sessions right now.";
+      container.innerHTML = `<p style="color:#777; padding: 10px 0;">${message}</p>`;
+      return;
+    }
+
+   filtered.forEach(session => {
+      const card = document.createElement('div');
+      card.className = 'session-card';
+      card.innerHTML = `
+        <div class="session-header" onclick="highlightTarget('${session.targetId}')">
+          <div>
+            <div class="session-title">${session.title}</div>
+            <div class="session-time">${session.startTime} - ${session.endTime} (${session.location})</div>
+          </div>
+          <button class="toggle-btn" onclick="toggleDescription(event, this)">▼</button>
+        </div>
+        <div class="session-description">
+          ${session.description || 'No description provided.'}
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tab-current').classList.toggle('active', tab === 'current');
+    document.getElementById('tab-all').classList.toggle('active', tab === 'all');
+    renderSessions();
+  }
+   
+  function selectMapLocation(targetId) {
+    selectedTargetId = targetId;
+    
+    highlightTarget(targetId);
+
+    const banner = document.getElementById('filter-banner');
+    const filterText = document.getElementById('filter-text');
+    banner.style.display = 'flex';
+    filterText.innerText = `Filtered: ${targetId.toUpperCase()}`;
+
+    renderSessions();
+  }  
+
+  function clearLocationFilter() {
+    selectedTargetId = null;
+    document.getElementById('filter-banner').style.display = 'none';
+    document.querySelectorAll('.map-target').forEach(el => el.classList.remove('highlighted'));
+    renderSessions();
+  }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const svgElement = document.querySelector('.map-svg');
+
+    svgElement.addEventListener('click', (event) => {
+      const targetShape = event.target.closest('.map-target');
+
+      if (targetShape) {
+        // Clicked a specific location area or key
+        const targetId = targetShape.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || targetShape.id;
+        if (targetId) {
+          selectMapLocation(targetId);
+        }
+      } else {
+        // Clicked outside any map shape (Reset Filter)
+        clearLocationFilter();
+      }
+    });
+
+    renderSessions();
+  });
+
+function isCurrentSession(startTime, endTime) {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+
+    return currentMinutes >= (startH * 60 + startM) && currentMinutes <= (endH * 60 + endM);
+  }
+
+  function toggleDescription(event, btn) {
+    event.stopPropagation();
+
+    const card = btn.closest('.session-card');
+    const isExpanded = card.classList.toggle('expanded');
+
+    btn.innerHTML = isExpanded ? '▲' : '▼';
+  }
+
+  document.addEventListener('DOMContentLoaded', renderSessions);
+
+</script>
+
