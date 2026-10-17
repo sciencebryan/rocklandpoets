@@ -922,7 +922,7 @@ function isCurrentSession(startTime, endTime) {
     const [startH, startM] = startTime.split(':').map(Number);
     const [endH, endM] = endTime.split(':').map(Number);
 
-    return currentMinutes >= (startH * 60 + startM) && currentMinutes <= (endH * 60 + endM);
+    return currentMinutes >= (startH * 60 + startM - 30) && currentMinutes <= (endH * 60 + endM);
   }
 
   function toggleDescription(event, btn) {
