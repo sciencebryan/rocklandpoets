@@ -767,9 +767,27 @@
 
     btn.disabled = true;
     btn.textContent = 'Drawing…';
+
+    // The database rejects sign-up writes once signups_closed_at is set, so
+    // reopen briefly, redraw, then restore the original close time.
+    const originalClosedAt = currentEvent.signups_closed_at;
+    const { error: reopenError } = await supabase.from('events').update({ signups_closed_at: null }).eq('id', currentEvent.id);
+    if (reopenError) {
+      toast('Could not reopen for re-draw: ' + reopenError.message);
+      btn.disabled = false; btn.textContent = 'Re-randomize';
+      return;
+    }
+
     const result = await runDraw();
+
+    // Always re-close, whether or not the draw succeeded
+    const { error: recloseError } = await supabase.from('events').update({ signups_closed_at: originalClosedAt }).eq('id', currentEvent.id);
     btn.disabled = false;
     btn.textContent = 'Re-randomize';
+    if (recloseError) {
+      alert('WARNING: sign-ups could not be re-closed (' + recloseError.message + '). Reload the page and check the event before continuing.');
+      return;
+    }
     if (result.error) { toast(result.error); return; }
 
     toast('Re-randomized.');
