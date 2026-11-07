@@ -117,6 +117,7 @@
 
     <div id="drawResults" style="display:none;">
       <h2 style="font-size:1.1rem; margin-top:20px; margin-bottom:10px;">Tonight's competing order</h2>
+      <button class="btn-secondary" id="rerandomizeBtn" style="width:auto; padding:8px 14px; margin-bottom:10px;">Re-randomize</button>
       <div id="competingList"></div>
       <div id="cutListWrapper" style="display:none; margin-top:16px;">
         <div class="meta" style="margin-bottom:8px;">Randomized out:</div>
@@ -705,19 +706,12 @@
     }
   }
 
-  document.getElementById('closeSignupsBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('closeSignupsBtn');
-    btn.disabled = true;
-    btn.textContent = 'Drawing…';
-
+  // Shuffles all sign-ups for the current event and writes draw_order /
+  // randomized_out. Overwrites every sign-up row, so it also works as a re-draw.
+  async function runDraw() {
     const { data: signups, error } = await supabase.from('slam_signups').select('id, attendee_id').eq('event_id', currentEvent.id);
-    if (error) { toast('Error loading sign-ups: ' + error.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
-
-    if (!signups || signups.length === 0) {
-      toast('No sign-ups to draw from.');
-      btn.disabled = false; btn.textContent = 'Close sign-ups & draw';
-      return;
-    }
+    if (error) return { error: 'Error loading sign-ups: ' + error.message };
+    if (!signups || signups.length === 0) return { error: 'No sign-ups to draw from.' };
 
     // Fisher-Yates shuffle
     const shuffled = [...signups];
@@ -736,13 +730,49 @@
     ];
 
     const { error: upsertError } = await supabase.from('slam_signups').upsert(updates, { onConflict: 'event_id,attendee_id' });
-    if (upsertError) { toast('Draw failed: ' + upsertError.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
+    if (upsertError) return { error: 'Draw failed: ' + upsertError.message };
+    return { now };
+  }
 
-    const { error: eventError } = await supabase.from('events').update({ signups_closed_at: now }).eq('id', currentEvent.id);
-    if (eventError) { toast('Error closing sign-ups: ' + eventError.message); btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; return; }
+  document.getElementById('closeSignupsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('closeSignupsBtn');
+    const reset = () => { btn.disabled = false; btn.textContent = 'Close sign-ups & draw'; };
+    btn.disabled = true;
+    btn.textContent = 'Drawing…';
 
-    currentEvent.signups_closed_at = now;
+    const result = await runDraw();
+    if (result.error) { toast(result.error); reset(); return; }
+
+    const { error: eventError } = await supabase.from('events').update({ signups_closed_at: result.now }).eq('id', currentEvent.id);
+    if (eventError) { toast('Error closing sign-ups: ' + eventError.message); reset(); return; }
+
+    currentEvent.signups_closed_at = result.now;
     toast('Sign-ups closed, draw complete.');
+    await refreshSlamUI();
+  });
+
+  document.getElementById('rerandomizeBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('rerandomizeBtn');
+
+    // Don't reshuffle once round scores exist for this event
+    const { count: roundCount, error: roundErr } = await supabase
+      .from('competition_rounds').select('id', { count: 'exact', head: true }).eq('event_id', currentEvent.id);
+    if (roundErr) { toast('Could not check rounds: ' + roundErr.message); return; }
+    if (roundCount > 0) {
+      toast(`Can't re-randomize: ${roundCount} round entr${roundCount === 1 ? 'y' : 'ies'} already recorded.`);
+      return;
+    }
+
+    if (!confirm('Re-randomize the order? The current order and cut list will be replaced.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Drawing…';
+    const result = await runDraw();
+    btn.disabled = false;
+    btn.textContent = 'Re-randomize';
+    if (result.error) { toast(result.error); return; }
+
+    toast('Re-randomized.');
     await refreshSlamUI();
   });
 
@@ -782,6 +812,7 @@
       cutWrapper.style.display = 'none';
     }
 
+    document.getElementById('rerandomizeBtn').style.display = myRole === 'checkin_staff' ? 'none' : 'inline-block';
     document.getElementById('drawResults').style.display = 'block';
   }
 </script>
